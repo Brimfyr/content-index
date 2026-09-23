@@ -7,36 +7,19 @@ abstract = "Physically derived atmospheres, hazes and cloud layers for Kitten Sp
 description = '''
 # Real Atmospheres
 
-The atmosphere realism overhaul for Kitten Space Agency, packaged as a
-[StarMap](https://github.com/StarMapLoader/StarMap) mod. No game files are
-modified and no admin rights are needed: at launch the mod builds patched
-shadow copies of the relevant Core content in the mods folder and uses Harmony
-to redirect the game's file reads into them. The shadow is rebuilt from the
-current game files at every launch, and if an update changes an XML anchor the
-affected patch is skipped gracefully (stock look until the mod is updated).
-Shader patches are more fragile: a game update that reworks the atmosphere
-shaders can stop them compiling, so check the release's tested game build.
+Atmospheres, hazes and clouds for Kitten Space Agency's Solar System, derived from each body's composition and particle optics. A [StarMap](https://github.com/StarMapLoader/StarMap) mod.
 
-## What it changes
+No game files are modified. At launch the mod builds patched copies of the game's shaders and system XML and loads those instead. If a game update changes a patched part of the XML, that patch is skipped. A game update that changes the atmosphere shaders can stop them compiling, so use a release built for your KSA version.
+
+## Features
 
 ### Mars
 
-- **Rayleigh scattering** derived from real composition (95% CO₂ at 6.1 mbar):
-  faint, blue, λ⁻⁴.
-- **Dust as the colour engine**: bhmie-derived Mie coefficients (red-heavy
-  scattering spectrum), 9 km well-mixed scale height — the sky colour now comes
-  from real dust optics, not a painted tint.
-- **Mie-theory dust phase function** (Level 2 of Schneegans et al. 2024): the
-  *exact* per-angle Mie phase function from a bhmie solution for
-  feldspar+hematite Martian dust, baked as a 361-sample lookup table in
-  `AtmosphereFunctions.glsl` (no Henyey–Greenstein approximation) and selected by
-  a sentinel asymmetry value. Produces the physically-exact blue sun halo.
-- **Double-exponential dust density**: a compact, capped dust layer (Schneegans)
-  across all the atmosphere shaders, so the sunset forward-glow is controlled by
-  the real dust vertical profile rather than an artificial limiter — the
-  Curiosity-style blue sunset, tamed but brilliant.
-- **MarsCirrus layer**: high-altitude (22–29 km) water-ice clouds — polar hoods
-  and equatorial wisps, 2D + volumetric, from an 8k source map.
+- Rayleigh scattering from a 95% CO₂ atmosphere at 6.1 mbar
+- Dust scattering from Mie theory, with a 9 km scale height
+- Exact Mie phase function for Martian dust, giving the blue sun halo and blue sunsets
+- Double-exponential dust density profile
+- Water-ice cirrus at 22–29 km, in 2D and volumetric
 
 ![Mars from orbit](ksa-image:mars-orbit)
 ![Mars's north pole](ksa-image:mars-north-pole)
@@ -46,183 +29,82 @@ shaders can stop them compiling, so check the release's tested game build.
 
 ### Venus
 
-- **Composition-true dense CO₂ Rayleigh** (×53 Earth surface density), plus a
-  blue-selective absorber low in the atmosphere that drives a progressively
-  murkier yellow descent to a Venera-matching dark surface — the "fog" emerges
-  from real multiple scattering and aerial perspective, no fake fog term. (The
-  famous dark UV markings come from Venus's *real* "unknown UV absorber", which
-  actually sits high at the cloud tops — those are carried by the cloud texture,
-  not this low-altitude atmospheric term, which models the sub-cloud murk.)
+- Dense CO₂ Rayleigh scattering, at 53× Earth's surface density
+- Blue-absorbing haze below the clouds
 
 ![Venus from orbit](ksa-image:venus-orbit)
 ![Venus's thick fog](ksa-image:venus-surface)
 
 ### Jupiter
 
-- **Composition-derived H₂/He Rayleigh** (×0.31 Earth) at the true 25 km scale
-  height — a razor-thin blue limb over the cloud tops, Juno-style.
-- **Cloud decks rescaled to reality**: lower deck −25 to +15 km, main deck from
-  15 km with storm structures 10–96 km tall, densities and raymarching rescaled
-  to preserve opacity and detail. Orbit-transition altitudes rescaled to match.
+- H₂/He Rayleigh scattering, with a 25 km scale height
+- Cloud decks at real altitudes: lower deck −1 to 12 km, main deck from 15 km, storms up to 96 km
 
 ![Jupiter's clouds](ksa-image:jupiter-low)
 
 ### Saturn
 
-- **Above-haze Rayleigh**: a faint λ⁻⁴ blue limb (the deep atmosphere is hidden
-  beneath the high haze), a thin gentle haze layer, and a pale-gold methane
-  chromophore. Physically-derived 52 km scale height (Saturn's low gravity
-  makes it puffy).
-- **Volumetric clouds** (Jupiter-style, stock Saturn had none): 3D banded cloud
-  structure with towers, coverage taken from the planet's own banding and colour
-  sampled from its diffuse map, so the clouds match the surface. How high a column
-  builds follows the map's brightness, bright cloud being fresh ice carried up,
-  so the pale bands stand roughly 37 km above the dark ones.
-- **Higher-resolution surface map** — 2048/face, up from stock 1024.
+- Rayleigh scattering above a thin haze, with methane colouring and a 52 km scale height
+- Volumetric clouds, with cloud height following the planet's map
+- Colour map at 2048 px per cube face (stock: 1024)
 
 ![Saturn's clouds](ksa-image:saturn-low)
 
-### Uranus & Neptune
+### Uranus and Neptune
 
-- **Methane red-absorber** (in the ozone slot) is the colour engine: moderate
-  for Uranus's pale cyan — its thick photochemical haze mutes it — and stronger
-  for Neptune's deep blue, whose clearer atmosphere lets the colour show. A thin
-  above-haze λ⁻⁴ Rayleigh limb and a gentle haze sit on top.
-- **Volumetric clouds** (Jupiter-style, neither had any in stock): 3D cloud
-  structure with towers, coverage from the planet's banding and colour sampled
-  from its diffuse map. Cloud-top height follows the map's brightness, so
-  Neptune's white wisps ride about 26 km above its dark lanes. Subtler on
-  featureless Uranus, more defined on Neptune.
-- **Higher-resolution surface maps** — 2048/face, up from stock 512.
+- Methane absorption, with a thin Rayleigh limb and haze
+- Volumetric clouds, with cloud height following the planet's map
+- Colour maps at 2048 px per cube face (stock: 512)
 
 ![Uranus's clouds](ksa-image:uranus-low)
 ![Neptune's clouds](ksa-image:neptune-low)
 
 ### Titan
 
-- **Stratified haze bands**: the layered upper hazes are modulated into the
-  actual scattering medium (Rayleigh density warped into denser/thinner shells),
-  not painted on — so limb glow, phase and transmittance are all physically
-  correct. A per-pixel limb march gives them organic, broken, undulating,
-  region-varying structure — the horizontal detail the symmetric atmosphere LUT
-  can't hold — and they slowly rotate around Titan's spin axis and reshape over
-  time (sim-linked: pausing freezes them, time-warp speeds them up). Confined to
-  high altitude above the tholin deck, over a smooth thick lower haze, matching
-  Cassini limb imagery closely enough to be hard to tell from a photo.
-- **Detached haze laminae**: two barely-visible stratified layers (290 km and
-  230 km, each 2 km thin — Cassini resolves individual haze layers at km
-  scale), from organic SpaceEngine-generated cloud maps. The subtle broken
-  limb strips that make the real Titan look organic rather than a clean
-  airbrushed ball.
+- Stratified upper haze, animated with simulation time
+- Detached haze layers at 230 and 290 km
 
 ![Titan from orbit](ksa-image:titan-orbit)
 ![Titan's terminator](ksa-image:titan-terminator)
 ![Titan's hazes](ksa-image:titan-hazes)
 
-### Triton & Pluto
+### Pluto and Triton
 
-- **Derived N₂ Rayleigh** (Triton: Voyager 1.5 Pa @ 38 K, H = 14.8 km; Pluto:
-  New Horizons 1.0 Pa @ 40 K, H = 19.2 km). Physically honest — and honestly
-  near-invisible at the game's fixed exposure, like the real thing.
-- **Forward-scattering tholin haze** (the visible component of both
-  atmospheres): Pluto's fractal aggregates at g = 0.85 give ~1900× more
-  brightness forward than back — invisible at full phase, then the iconic
-  New Horizons blue ring ignites as you swing behind the planet. Triton's
-  smaller particles (g = 0.55, ~40×) do the same more subtly, matching
-  Voyager's forward-geometry haze detections.
-- **Stratified haze bands**: the New Horizons gravity-wave layers, modulated
-  into the haze density and rendered by a per-pixel march so the forward-
-  scattered crescent shows stacked, broken, drifting layers — hash-salted for
-  irregular spacing, dropped bands and varied widths, and animated (slow
-  rotation + cloud-like formation/dissipation, sim-linked). Triton gets the same
-  treatment on its thinner forward-scattering haze.
-- **Triton's condensate clouds**: patchy N₂-ice wisps at 4–6.5 km.
+- N₂ Rayleigh scattering from measured surface pressure and temperature
+- Forward-scattering haze, visible as a ring when looking toward the Sun
+- Stratified haze bands, animated with simulation time
+- Nitrogen-ice clouds on Triton at 4–6.5 km
 
 ![Triton from orbit](ksa-image:triton-orbit)
 ![Pluto's limb and hazes](ksa-image:pluto-hazes)
 
-## Install
+## Installation
 
-Requires [StarMap](https://github.com/StarMapLoader/StarMap). Each release zip is
-named with the KSA build it was tested on (`RealAtmospheres-v<version>-ksa<build>.zip`).
+Requires [StarMap](https://github.com/StarMapLoader/StarMap). Each release is named with the KSA build it was tested on.
 
-### With a mod manager (easiest)
+**With Borea:** install Real Atmospheres from the mod list.
 
-In [Borea](https://github.com/KSAModding), install Real Atmospheres from the mod
-list. It installs the StarMap loader for you, unpacks the mod into the active
-instance and enables it, so there is nothing to place by hand. Note that a manager
-keeps the game's user data (mods, `manifest.toml`, `settings.toml`, saves, logs) in
-its own instance folder rather than `Documents\My Games\Kitten Space Agency`.
+**Manually:**
 
-### By hand
+1. Install StarMap and run the game once through `StarMap.Loader.exe`.
+2. Extract the release into `Documents\My Games\Kitten Space Agency\mods\`, giving `mods\RealAtmospheres\RealAtmospheres.dll`.
+3. Launch the game once and close it. KSA adds new mods to `manifest.toml` disabled: set this mod's entry to `enabled = true`.
+4. Launch through StarMap.
 
-1. Install StarMap and run the game once via `StarMap.Loader.exe`.
-2. Extract the zip into `Documents\My Games\Kitten Space Agency\mods\`, so you
-   end up with `mods\RealAtmospheres\RealAtmospheres.dll`. The folder must be
-   named exactly `RealAtmospheres` (KSA uses the folder name as the mod id).
-3. **Enable it.** On the next launch KSA finds the folder and adds it to
-   `Documents\My Games\Kitten Space Agency\manifest.toml`, but always
-   **disabled**. Close the game and change its entry to:
+To uninstall, delete `mods\RealAtmospheres` and `mods\_RealSharedShadow`.
 
-   ```toml
-   [[mods]]
-   id = "RealAtmospheres"
-   enabled = true
-   ```
+## Building
 
-4. Launch through StarMap. The log lists `found mod 'RealAtmospheres'` when it
-   is active. To uninstall, delete the `RealAtmospheres` folder and the
-   `_RealSharedShadow` folder the mod creates next to it; KSA removes the
-   manifest entry itself.
-
-## Building from source
-
-`deploy.ps1` builds the .NET 10 class library and installs it into your mods
-folder; `package.ps1 [-Version x.y.z] [-GameBuild vYYYY.M.D.NNNN]` builds the
-player zip in `dist\`. Both ship exactly the assets listed in `release-files.txt`
-(everything else in `assets\` is a converter source or stale output). The csproj only references `StarMap.API.dll` and `0Harmony.dll`
-(set `StarMapDir` to your StarMap folder); all game access is via reflection.
-
-## How it works
-
-- `[StarMapBeforeMain]` runs before the game's `Main` and applies anchored text
-  transforms (idempotent — a hand-patched install passes through unchanged) to
-  fresh copies of the stock files, rebuilt at every launch:
-  `Content\Core\Shaders\**` into `ShadowContent\Core\Shaders\` in the mod folder,
-  and `Astronomicals.xml`, `SolSystem.xml` and `SolSystemDense.xml` into
-  `mods\_RealSharedShadow\Core\` (the leading underscore makes KSA's mod loader
-  skip that folder).
-- Harmony prefixes on `KSA.Mod.LoadAssetBundles`/`LoadEditorTagDefinitions`
-  swap the Core mod's `Astronomicals.xml` assets entry for the shadow copy's
-  absolute path, and prefixes on `LoadSystems`/`PrepareSystems` do the same for
-  the Sol system templates. (The generic `XmlLoader.Load<T>` is deliberately left alone:
-  patching a shared generic instantiation hijacks every other `T`.) Cirrus
-  textures are referenced by absolute path into the mod's `assets\` folder
-  (`Mod.GetPath` is `Path.Combine`, which passes rooted paths through).
-- A Harmony prefix on `RenderCore.ShaderModuleUtils.FromFile` remaps any
-  `Content\Core\Shaders\*` path into the shadow tree. shaderc `#include`s
-  resolve relative to the requesting file, so the whole tree follows.
+`deploy.ps1` builds the mod and installs it into your mods folder. `package.ps1 -Version x.y.z -GameBuild vYYYY.M.D.NNNN` builds a release archive in `dist\`. Set `StarMapDir` to your StarMap folder.
 
 ## Credits
 
-The shipped textures are derived from these sources: resized into cubemaps, or turned into cloud masks and
-flowmaps by the scripts in this repo.
+- Saturn map mixed by JCP-JohnCarlo, from work by HellcatF6F, MrSpace43-Celestia, FarGetaNik and Snowfall-The-Cat.
+- Uranus map by Askaniy, [CC BY-NC-SA 3.0](https://creativecommons.org/licenses/by-nc-sa/3.0/). Our modified Uranus map, cloud mask and flowmap are released under the same licence.
+- Neptune map by Askaniy, [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/), modified.
+- Mars cirrus, Titan haze and Triton cloud masks: *Produced in part with SpaceEngine PRO © Cosmographic Software LLC.*
 
-| Source | By | Shipped files derived from it |
-|---|---|---|
-| Mars cloud map | SpaceEngine | `MarsCirrusMaskVolumetric.dds`, `MarsCirrusMask2D.png` |
-| Saturn texture map | JCP-JohnCarlo | `SaturnDiffuse.ktx2`, `SaturnCloudsMask.dds`, `SaturnFlowmap.dds` |
-| Uranus texture map | Askaniy | `UranusDiffuse.ktx2`, `UranusCloudsMask.dds`, `UranusFlowmap.dds` |
-| Neptune texture map | Askaniy | `NeptuneDiffuse.ktx2`, `NeptuneCloudsMask.dds`, `NeptuneFlowmap.dds` |
-| Titan haze maps | SpaceEngine | `TitanUpperHazeMask*`, `TitanLowerHazeMask*` |
-| Triton cloud map | SpaceEngine | `TritonCloudsMask*` |
-
-`MarsDustPhaseLut.glsl` is computed by `make_mars_phase_lut.py` (Mie scattering), not derived from any
-image. Jupiter uses the game's own textures.
-
-The Mars, Titan and Triton masks come from our own SpaceEngine PRO exports, which carry a required credit
-line: *Produced in part with SpaceEngine PRO © Cosmographic Software LLC*. `CREDITS.md` records the origin
-and terms of every shipped file.
+The code is MIT. Because of the Uranus map, the release as a whole is for non-commercial use. [CREDITS.md](https://github.com/Brimfyr/RealAtmospheres/blob/main/CREDITS.md) gives the source and terms of every shipped file.
 '''
 license = "MIT AND CC-BY-NC-SA-3.0 AND CC-BY-3.0"
 tags = ["visual"]
