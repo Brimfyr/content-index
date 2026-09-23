@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { parseDocument, writeDocument } from "../js/toml.js";
 import { emptyForm, formFromDocument, documentFromForm } from "../js/model.js";
-import { newFileUrl, editUrl, prefillFromRepository, repositoryApiUrl, URL_LIMIT } from "../js/github.js";
+import { newFileUrl, editUrl, pullRequestLink, copyAndOpen, prefillFromRepository, repositoryApiUrl, URL_LIMIT, PASTE_NEW, PASTE_EDIT } from "../js/github.js";
 
 const LISTINGS = new URL("../../listings/", import.meta.url);
 
@@ -106,6 +106,40 @@ test("the new-file address carries the file until it gets too long", () => {
   assert.equal(long.filled, false);
   assert.equal(long.url, "https://github.com/KSAModding/content-index/new/main?filename=listings/MyMod.toml");
   assert.equal(editUrl("MyMod"), "https://github.com/KSAModding/content-index/edit/main/listings/MyMod.toml");
+});
+
+test("a new listing gets the plain link and the paste step once the link would pass the limit", () => {
+  const text = fs.readFileSync(new URL("fixtures/StarMap.toml", import.meta.url), "utf8");
+  const plain = "https://github.com/KSAModding/content-index/new/main?filename=listings/StarMap.toml";
+  const filled = `${plain}&value=${encodeURIComponent(text)}`;
+  assert.ok(filled.length > URL_LIMIT && filled.length < 5900, "the fixture sits between the limit and the link GitHub refused");
+  assert.deepEqual(pullRequestLink("StarMap", text), { url: plain, step: PASTE_NEW });
+  const short = "id = \"MyMod\"\n";
+  assert.deepEqual(pullRequestLink("MyMod", short), { url: newFileUrl("MyMod", short).url, step: "" });
+});
+
+test("a changed listing opens the edit page and says to replace the whole file", () => {
+  assert.deepEqual(pullRequestLink("MyMod", "id = \"MyMod\"\n", "MyMod"), {
+    url: "https://github.com/KSAModding/content-index/edit/main/listings/MyMod.toml",
+    step: PASTE_EDIT,
+  });
+});
+
+test("the button copies the file before it opens GitHub", async () => {
+  const calls = [];
+  const clipboard = { writeText: async (text) => calls.push(["copy", text]) };
+  const tab = { opener: "page" };
+  const open = (url) => calls.push(["open", url]) && tab;
+  assert.deepEqual(await copyAndOpen("https://github.com/x", "id = 1\n", clipboard, open), { copied: true, opened: true });
+  assert.deepEqual(calls, [["copy", "id = 1\n"], ["open", "https://github.com/x"]]);
+  assert.equal(tab.opener, null);
+});
+
+test("GitHub still opens when the browser refuses the clipboard, and a blocked tab is reported", async () => {
+  const refused = { writeText: async () => { throw new Error("NotAllowedError"); } };
+  assert.deepEqual(await copyAndOpen("u", "t", refused, () => ({})), { copied: false, opened: true });
+  assert.deepEqual(await copyAndOpen("u", "t", undefined, () => ({})), { copied: false, opened: true });
+  assert.deepEqual(await copyAndOpen("u", "t", { writeText: async () => {} }, () => null), { copied: true, opened: false });
 });
 
 test("GitHub repository facts fill the form fields", () => {
