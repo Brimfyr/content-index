@@ -911,6 +911,11 @@ summary {
   margin-top: 4px;
 }
 
+.toolbar .step {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
 .toolbar .button.primary {
   flex: none;
   min-height: 48px;
