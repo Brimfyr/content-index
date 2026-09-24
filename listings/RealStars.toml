@@ -1,0 +1,123 @@
+spec_version = 1
+id = "RealStars"
+type = "mod"
+name = "Real Stars"
+authors = ["Brimfyr"]
+abstract = "Draws stars, planets and the Sun with their real brightness, colour and position."
+description = '''
+# Real Stars
+
+Stars, planets and the Sun drawn with their real brightness, colour and position, for Kitten Space Agency. A [StarMap](https://github.com/StarMapLoader/StarMap) mod.
+
+No game files are modified. At launch the mod builds patched copies of the game's star, planet and Sun shaders and loads those instead. If a game update changes one of those shaders, it is left stock until the mod is updated. Works alongside Real Atmospheres.
+
+## Features
+
+### Stars
+
+- 83,337 stars from the Hipparcos catalogue, to magnitude 9, coloured from their B−V index
+- Brightness from magnitude, drawn with a realistic point spread function
+- Parallax: stars sit at their real distances and shift as you travel
+- Twinkling through atmospheres, stronger and more colourful toward the horizon, following simulation time
+
+### Planets
+
+- Brightness from albedo, phase and distance, on the same magnitude scale as the stars
+- Saturn's rings add to its brightness
+- Planets and moons dim in their parent's shadow
+- Twinkling reduced by apparent size
+
+### The Sun
+
+- Drawn as a star at every distance, at its real angular size, blending into the 3D sphere up close
+- Sphere at its real size and photosphere colour, with limb darkening
+- Dims as it fills more of the screen
+- Replaces the stock sun sprite and lens flare
+
+### Occlusion and starbursts
+
+- Stars, planets and the Sun fade behind planets, atmospheres and vessels
+- Starbursts modelled on the human eye, on the Sun and on planets brighter than magnitude −3
+- Starbursts fade as their source is covered or leaves the screen
+- The Sun's starburst is drawn over everything else
+- Starbursts follow the game's lens flare setting
+
+## Screenshots
+
+![Earth and Orion](ksa-image:earth-and-orion)
+![The Sun from the Moon's surface](ksa-image:moon-surface)
+![Sunset from orbit](ksa-image:orbit-sunset)
+
+## Installation
+
+Requires [StarMap](https://github.com/StarMapLoader/StarMap). Each release is named with the KSA build it was tested on.
+
+**With Borea:** install Real Stars from the mod list.
+
+**Manually:**
+
+1. Install StarMap and run the game once through `StarMap.Loader.exe`.
+2. Extract the release into `Documents\My Games\Kitten Space Agency\mods\`, giving `mods\RealStars\RealStars.dll`.
+3. Launch the game once and close it. KSA adds new mods to `manifest.toml` disabled: set this mod's entry to `enabled = true`.
+4. Launch through StarMap.
+
+To uninstall, delete `mods\RealStars`.
+
+## Building
+
+`deploy.ps1` builds the mod and installs it into your mods folder. `package.ps1 -Version x.y.z -GameBuild vYYYY.M.D.NNNN` builds a release archive in `dist\`. Set `StarMapDir` to your StarMap folder. `make_star_binary.py` rebuilds the star catalogue from the Hipparcos main catalogue (`hip_main.dat`).
+
+## Credits
+
+- Star catalogue built from the Hipparcos Catalogue (ESA 1997, ESA SP-1200), retrieved from [VizieR](https://vizier.cds.unistra.fr/) (CDS, Strasbourg), catalogue I/239.
+
+The code is MIT. [CREDITS.md](https://github.com/Brimfyr/RealStars/blob/main/CREDITS.md) gives the source and terms of the shipped catalogue.
+'''
+license = "MIT"
+tags = ["visual"]
+
+[releases]
+github = "Brimfyr/RealStars"
+
+[links]
+forums = "https://forums.ahwoo.com/forums/kitten-space-agency/mod-releases/real-stars.1285/"
+repository = "https://github.com/Brimfyr/RealStars"
+bugtracker = "https://github.com/Brimfyr/RealStars/issues"
+
+[compatibility]
+game_min = "2026.9.22.5482"
+
+[loader]
+id = "StarMap"
+min = "0.4.7"
+
+[images.icon]
+url = "https://raw.githubusercontent.com/Brimfyr/RealStars/3bf2b568fdf521a28a40f574d263d98ed8fb8f7f/content/icon.png"
+sha256 = "f4e928a7c9b9995606fa6ef62ee1026d8de8979d5f5beada30fabbd822290a46"
+width = 512
+height = 512
+size = 95493
+
+[[images.description]]
+id = "earth-and-orion"
+url = "https://raw.githubusercontent.com/Brimfyr/RealStars/refs/heads/main/content/earth-and-orion.jpg"
+sha256 = "38e78df49f77240a970c6fcd72b6c2919918e0e8379bee4c72bbacdbd3bafd47"
+width = 1920
+height = 1080
+size = 279474
+
+[[images.description]]
+id = "moon-surface"
+url = "https://raw.githubusercontent.com/Brimfyr/RealStars/refs/heads/main/content/moon-surface.jpg"
+sha256 = "7bfceab07ace0a846e76c45f64c125e5c6ab9f9f8f54a56a1cb91412c3306b34"
+width = 1920
+height = 1080
+size = 434635
+
+[[images.description]]
+id = "orbit-sunset"
+url = "https://raw.githubusercontent.com/Brimfyr/RealStars/refs/heads/main/content/orbit-sunset.jpg"
+sha256 = "a9c00b19d5061eaaa3cd21d569a194b157ab7def7d68d13a579b30995594ee00"
+width = 1920
+height = 1080
+size = 175966
