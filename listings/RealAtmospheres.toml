@@ -200,10 +200,10 @@ size = 248391
 [[images.description]]
 id = "saturn-low"
 url = "https://raw.githubusercontent.com/Brimfyr/RealAtmospheres/refs/heads/main/content/saturn-low.jpg"
-sha256 = "b3b9d02049baeeef1a860e608548ebd050bfa4b6ada6b33fbf8fbfd62a55df56"
+sha256 = "2207c9180b98f2b2ec896a16ad55a6f930ea98d72c3f26dc372bb34babda2102"
 width = 1920
 height = 1080
-size = 394505
+size = 272233
 
 [[images.description]]
 id = "uranus-low"
