@@ -384,7 +384,7 @@
       <section class="card" aria-labelledby="section-pr" data-nav="off">
         <h2 id="section-pr">How the pull request is checked</h2>
         <ol class="next">
-          <li>GitHub asks you to sign in, makes a copy of the index in your account (a fork) and opens the pull request form with your file in it. Several listings can go into one pull request, and it merges by itself once ownership verifies for each of them.</li>
+          <li>GitHub asks you to sign in, makes a copy of the index in your account (a fork) and opens its editor. The button copies your file first. GitHub fills in a short new file. For a long one, paste the copy into the empty file. For a change, replace the whole old file with the copy. Several listings can go into one pull request, and it merges by itself once ownership verifies for each of them.</li>
           <li>A bot checks the file, downloads your latest release and fetches your images, then comments with its verdict.</li>
           <li>It verifies that your GitHub account controls the release host, by one of these:
             <ul>
@@ -419,6 +419,7 @@
     <div class="toolbar-inner">
       <div class="toolbar-state">
         <p id="check-count" class="hint"></p>
+        <p id="pr-step" class="step" hidden></p>
         <div id="msg-pr" class="messages" aria-live="polite"></div>
       </div>
       <a id="open-pr" class="button primary" href="https://github.com/KSAModding/content-index" target="_blank" rel="noopener noreferrer">Open pull request on GitHub</a>

@@ -5,7 +5,7 @@ import { emptyForm, emptyRecord, formFromDocument, documentFromForm, isFixedLink
 import { measure, readCapped, LIMITS, MEASURE_FACTOR, ICON, DESCRIPTION } from "./images.js";
 import { renderPreview } from "./markdown.js";
 import { zipNames, inspectArchive, StampError } from "./archive.js";
-import { newFileUrl, editUrl, rawListingUrl, repositoryApiUrl, prefillFromRepository, listingPath } from "./github.js";
+import { pullRequestLink, copyAndOpen, rawListingUrl, repositoryApiUrl, prefillFromRepository, listingPath } from "./github.js";
 
 const STORAGE_KEY = "ksa-listing-page/v1";
 const TIMEOUT = 20000;
@@ -822,11 +822,14 @@ function renderOutput() {
   link.setAttribute("aria-disabled", blocked ? "true" : "false");
   link.classList.toggle("disabled", blocked);
   link.textContent = state.mode === "edit" && state.base ? "Open the edit page on GitHub" : "Open pull request on GitHub";
-  if (state.mode === "edit" && state.base) {
-    link.href = editUrl(state.base.id);
-  } else {
-    link.href = newFileUrl(String(current.document.id || ""), current.text).url;
-  }
+  const { url, step } = currentLink();
+  link.href = url;
+  $("pr-step").textContent = step;
+  $("pr-step").hidden = blocked || !step;
+}
+
+function currentLink() {
+  return pullRequestLink(String(current.document.id || ""), current.text, state.mode === "edit" && state.base ? state.base.id : null);
 }
 
 function refresh() {
@@ -1016,17 +1019,21 @@ function renderArchiveResult() {
   $("archive-result").replaceChildren(...lines);
 }
 
+const COPY_REFUSED = "The browser did not allow copying. The file is selected, copy it by hand.";
+
 async function copyOutput(target) {
   try {
     await navigator.clipboard.writeText(current.text);
     say(target, null, "Copied.");
-    return true;
   } catch {
-    $("output").focus();
-    $("output").select();
-    say(target, NOTE, "The browser did not allow copying. The file is selected, copy it by hand.");
-    return false;
+    selectOutput();
+    say(target, NOTE, COPY_REFUSED);
   }
+}
+
+function selectOutput() {
+  $("output").focus();
+  $("output").select();
 }
 
 function saveOutput() {
@@ -1045,16 +1052,22 @@ async function openPullRequest(event) {
     say("msg-pr", ERROR, current.document.id ? "Fix the errors first. You can still copy or save the file." : "Give the id first.");
     return;
   }
-  const editing = state.mode === "edit" && state.base;
-  const filled = !editing && newFileUrl(String(current.document.id), current.text).filled;
-  const copied = await copyOutput("msg-pr");
-  if (editing) {
-    say("msg-pr", null, `${copied ? "The file is copied." : ""} In the GitHub editor, select all the text and paste the file over it.`);
-  } else if (!filled) {
-    say("msg-pr", null, `${copied ? "The file is copied." : ""} It is too long to fill in by the address, so paste it into the GitHub editor.`);
-  } else {
-    say("msg-pr", null, `${copied ? "The file is also copied, " : ""}in case GitHub does not fill it in.`);
+  event.preventDefault();
+  const { url, step } = currentLink();
+  const { copied, opened } = await copyAndOpen(url, current.text, navigator.clipboard, (address) => window.open(address, "_blank"));
+  const lines = [];
+  if (copied) {
+    lines.push(line(null, step ? "The file is copied." : "The file is also copied, in case GitHub does not fill it in."));
+  } else if (step) {
+    selectOutput();
+    lines.push(line(NOTE, COPY_REFUSED));
   }
+  if (!opened) {
+    const note = line(NOTE, "The browser blocked the new tab. ");
+    note.append(element("a", { href: url, target: "_blank", rel: "noopener noreferrer", text: "Open GitHub" }), ".");
+    lines.push(note);
+  }
+  $("msg-pr").replaceChildren(...lines);
 }
 
 async function loadText(url) {
