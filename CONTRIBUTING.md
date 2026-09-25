@@ -37,6 +37,12 @@ The [listing page](https://ksamodding.github.io/content-index/) writes or change
    Up to 15 documents merge themselves, as long as ownership verifies for every one of them: control of the release host for a listing, the account in `packs/<id>/owner.json` for a pack.
    A pull request that carries anything besides documents, or more than 15 of them, is valid but waits for a steward.
 
+## Code mods in an instance
+
+A manager such as Borea can start your mod in an instance, which is a game profile in a folder of its own and not in `Documents/My Games/Kitten Space Agency`.
+A code mod that reads the profile by that hardcoded path then finds an empty or wrong folder.
+[Make your mod work in a Borea instance](https://github.com/KSAModding/Borea/blob/main/docs/mod-authors.md) tells you why and what to use instead.
+
 ## The license field
 
 `license` is an SPDX license expression.
