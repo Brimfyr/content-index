@@ -3,12 +3,15 @@
 """Whether the account opening a pull request controls the release host it points at.
 
 RFC 0033 for the marker file and the owner id, RFC 0038 for the topic, RFC 0079
-for a fork.
+for a fork and for a SpaceDock mod.
 """
 
+import json
 import re
 import tomllib
-from urllib.parse import urlparse
+import urllib.error
+import urllib.parse
+import urllib.request
 
 VERIFIED = "verified"
 UNVERIFIED = "unverified"
@@ -20,7 +23,9 @@ TOPIC = "ksa-index-{login}"
 
 GITHUB_NAME = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$")
 
+SPACEDOCK_API = "https://spacedock.info/api"
 SPACEDOCK_GAME_ID = 22409
+USER_AGENT = "KSAModding-content-index-ownership"
 
 # Which host a verdict about an edit is talking about.
 CURRENT_HOST = "the authority the listing already names"
@@ -46,7 +51,7 @@ class Result:
 def github_repository(url):
     """`owner/name` from a GitHub URL, or None."""
     try:
-        parsed = urlparse(url or "")
+        parsed = urllib.parse.urlparse(url or "")
     except ValueError:
         return None
     if parsed.netloc.lower() not in ("github.com", "www.github.com"):
@@ -58,6 +63,41 @@ def github_repository(url):
     if not GITHUB_NAME.match(owner) or not GITHUB_NAME.match(name):
         return None
     return f"{owner}/{name}"
+
+
+def spacedock_mod(mod_id, user_agent=USER_AGENT):
+    """SpaceDock's info about a mod, as it gives it. SpaceDock needs no token."""
+    url = f"{SPACEDOCK_API}/mod/{urllib.parse.quote(str(mod_id), safe='')}"
+    headers = {"User-Agent": user_agent, "Accept": "application/json"}
+    request = urllib.request.Request(url, headers=headers)
+    refused = False
+    try:
+        with urllib.request.urlopen(request, timeout=30) as answer:
+            text = answer.read()
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            return None
+        if error.code not in (401, 403):
+            raise Unavailable(f"HTTP {error.code} asking SpaceDock for mod {mod_id}")
+        refused = True
+        text = error.read()
+    except OSError as error:
+        # A URLError prints as "<urlopen error ...>", which a GitHub comment hides as an
+        # HTML tag, so the reason carries only what went wrong.
+        detail = error.reason if isinstance(error, urllib.error.URLError) else error
+        raise Unavailable(f"SpaceDock did not answer about mod {mod_id}: {detail}") from error
+
+    try:
+        document = json.loads(text)
+    except ValueError as error:
+        raise Unavailable(
+            f"SpaceDock answered about mod {mod_id} with something that is not JSON"
+        ) from error
+    if not isinstance(document, dict):
+        raise Unavailable(f"SpaceDock answered about mod {mod_id} with no document")
+    if refused and not document.get("error"):
+        raise Unavailable(f"HTTP 4xx asking SpaceDock for mod {mod_id}")
+    return document
 
 
 def authority(document):
@@ -121,8 +161,11 @@ def _verify_spacedock(mod_id, listing_id, login, author_id, api):
     if not mod_id.isdigit():
         return Result(UNVERIFIED, f"'{mod_id}' is not a SpaceDock mod id, which is a number")
 
+    # The release flow of content-index-releases imports this module with
+    # lookups of its own that have no SpaceDock reader.
+    read = getattr(api, "spacedock_mod", None) or spacedock_mod
     try:
-        mod = api.spacedock_mod(mod_id)
+        mod = read(mod_id)
     except Unavailable as error:
         return Result(COULD_NOT_EVALUATE, str(error))
 

@@ -2,9 +2,12 @@
 # SPDX-License-Identifier: MIT
 """Tests for the ownership proofs. No token, no network."""
 
+import io
+import json
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -399,6 +402,66 @@ class SpaceDockProofs(unittest.TestCase):
         api = self.api(owner_id=7)
         self.verify(api, author_id=7)
         self.assertEqual(api.asked, ["spacedock:4253", "Maxi/KSA-AutoStage"])
+
+
+class GitHubOnlyApi:
+    """The GitHub lookups of a FakeApi without a SpaceDock reader, as the
+    release flow of content-index-releases hands them in."""
+
+    def __init__(self, api):
+        self.repository = api.repository
+        self.topics = api.topics
+        self.file = api.file
+
+
+class SpaceDockWithoutReader(unittest.TestCase):
+    """Lookups without a SpaceDock reader read SpaceDock directly, with the same rule."""
+
+    def verify(self, opener, login="Maxi", owner_id=7):
+        api = GitHubOnlyApi(
+            FakeApi({"Maxi/KSA-AutoStage": repository("Maxi/KSA-AutoStage", owner_id=owner_id)})
+        )
+        with mock.patch.object(ownership.urllib.request, "urlopen", opener):
+            return ownership.verify(SPACEDOCK_LISTING, login, 7, api)
+
+    def answer(self, mod):
+        return mock.Mock(return_value=io.BytesIO(json.dumps(mod).encode()))
+
+    def test_the_owner_of_the_linked_repository_verifies(self):
+        opener = self.answer(spacedock_mod())
+        result = self.verify(opener)
+        self.assertEqual(result.state, ownership.VERIFIED)
+        self.assertEqual(result.proof, "source code link, owner id")
+        request = opener.call_args.args[0]
+        self.assertEqual(request.full_url, "https://spacedock.info/api/mod/4253")
+        self.assertEqual(request.get_header("User-agent"), ownership.USER_AGENT)
+
+    def test_a_link_to_another_persons_repository_does_not_verify(self):
+        result = self.verify(self.answer(spacedock_mod()), login="Attacker", owner_id=99)
+        self.assertEqual(result.state, ownership.UNVERIFIED)
+        self.assertIn("Attacker did not prove control of Maxi/KSA-AutoStage", result.reason)
+
+    def test_each_reason_to_wait_gives_its_own_answer(self):
+        results = {
+            name: self.verify(opener)
+            for name, opener in {
+                "no link": self.answer(spacedock_mod(None)),
+                "not GitHub": self.answer(spacedock_mod("https://gitlab.com/Maxi/KSA-AutoStage")),
+                "timeout": mock.Mock(side_effect=TimeoutError("timed out")),
+                "connect timeout": mock.Mock(
+                    side_effect=ownership.urllib.error.URLError(TimeoutError("timed out"))
+                ),
+            }.items()
+        }
+        self.assertEqual(results["no link"].state, ownership.UNVERIFIED)
+        self.assertIn("has no source code link", results["no link"].reason)
+        self.assertEqual(results["not GitHub"].state, ownership.UNVERIFIED)
+        self.assertIn("does not name a GitHub repository", results["not GitHub"].reason)
+        for name in ("timeout", "connect timeout"):
+            self.assertEqual(results[name].state, ownership.COULD_NOT_EVALUATE)
+            self.assertEqual(
+                results[name].reason, "SpaceDock did not answer about mod 4253: timed out"
+            )
 
 
 def hosted_at(repository, identifier="AutoStage"):
