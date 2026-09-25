@@ -123,6 +123,7 @@ It does not write `owner.json`, so add that file yourself.
 For a later version, choose "Change a listed one" and load the pack id.
 The page loads the newest version from `main` and raises the version above every version file there, retracted ones included, and it sets the release time to now.
 It shows the reason of a retracted version, marks a member that has a newer release at least as stable as its pin, and opens GitHub at the new file.
+"Copy the member list for your forum thread" copies the member lines that the forum rules ask a pack thread for.
 
 The accepted owner record is read only from the base branch.
 Changing owner data in a pull request cannot grant ownership or make that pull request merge itself.

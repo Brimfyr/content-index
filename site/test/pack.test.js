@@ -6,7 +6,7 @@ import { indexFacts } from "../js/snapshot.js";
 import { parseDocument, writeDocument } from "../js/toml.js";
 import { emptyForm, formFromDocument, documentFromForm, sectionsOf, nounOf, releaseTime } from "../js/model.js";
 import {
-  memberChoices, versionChoices, defaultVersion, pinNotes, gameMinNotes, packOf, ownIds, raiseVersion, nextPackForm, freeVersion, newerNotes, nextVersionNotes,
+  memberChoices, versionChoices, defaultVersion, pinNotes, gameMinNotes, packOf, ownIds, raiseVersion, nextPackForm, freeVersion, newerNotes, nextVersionNotes, forumLines,
 } from "../js/pack.js";
 import { pullRequestLink, copyAndOpen, documentPath, rawPackUrl, URL_LIMIT, PASTE_NEW } from "../js/github.js";
 
@@ -21,12 +21,31 @@ const snapshot = {
   listings: [
     {
       id: "DeltaVMap",
-      authored: { type: "mod", name: "Delta-V Map" },
+      authored: {
+        type: "mod",
+        name: "Delta-V Map",
+        authors: ["Maxi"],
+        license: "MIT",
+        links: { forums: "https://forums.ahwoo.com/threads/deltavmap.978/" },
+      },
       releases: [
-        { version: "1.3.0", release_status: "stable", yanked: true, game_min: "2026.9.25.5500", game_min_revision: 5500 },
+        {
+          version: "1.3.0",
+          release_status: "stable",
+          yanked: true,
+          game_min: "2026.9.25.5500",
+          game_min_revision: 5500,
+          download: { url: "https://example.com/DeltaVMap-1.3.0.zip" },
+        },
         { version: "1.3.0-beta.1", release_status: "testing", game_min: "2026.9.22.5482", game_min_revision: 5482 },
         { version: "1.2.7", release_status: "stable", game_min: "2026.9.22.5482", game_min_revision: 5482 },
-        { version: "1.2.6", release_status: "stable", game_min: "2026.9.10.5438", game_min_revision: 5438 },
+        {
+          version: "1.2.6",
+          release_status: "stable",
+          game_min: "2026.9.10.5438",
+          game_min_revision: 5438,
+          download: { url: "https://example.com/DeltaVMap-1.2.6.zip" },
+        },
       ],
     },
     {
@@ -45,7 +64,11 @@ const snapshot = {
       releases: [{ version: "0.9.13", release_status: "stable", game_min: "2026.9", game_min_revision: 5402 }],
     },
     { id: "Unreleased", authored: { type: "mod" }, releases: [] },
-    { id: "StarMap", authored: { type: "mod-loader" }, releases: [{ version: "0.4.7", release_status: "stable" }] },
+    {
+      id: "StarMap",
+      authored: { type: "mod-loader", name: "StarMap", authors: ["StarMap Team"], license: "MIT" },
+      releases: [{ version: "0.4.7", release_status: "stable", download: { url: "https://example.com/StarMap-0.4.7.zip" } }],
+    },
     { id: "GoneMod", index_status: { state: "delisted" } },
     { id: "HiddenMod", authored: { type: "mod" }, index_status: { state: "delisted" }, releases: [{ version: "1.0.0", release_status: "stable" }] },
   ],
@@ -318,4 +341,28 @@ test("a member with a newer release at least as stable is marked, and a newer te
     ["mods[7]", "0.8.1", NOTE, "'AdvancedFlightComputer' has a newer testing release '0.8.1'; the pin stays until you move it"],
   ]);
   assert.deepEqual(newerNotes({ ...document, type: "mod" }, index), []);
+});
+
+test("the forum list has one line per member in the words Borea writes", () => {
+  const document = {
+    type: "modpack",
+    mods: [
+      { id: "DeltaVMap", version: "1.2.6" },
+      { id: "NotListed", version: "1.0.0" },
+      { id: "deltavmap", version: "1.3.0" },
+      { id: "StarMap", version: "0.4.7" },
+      { id: "HiddenMod", version: "1.0.0" },
+      { id: "DeltaVMap", version: "9.9.9" },
+    ],
+  };
+  const thread = "Thread: https://forums.ahwoo.com/threads/deltavmap.978/";
+  assert.deepEqual(forumLines(document, index), [
+    `Delta-V Map 1.2.6 - Author: Maxi - License: MIT - Download: https://example.com/DeltaVMap-1.2.6.zip - ${thread}`,
+    "NotListed 1.0.0 - Not listed in the content index",
+    `Delta-V Map 1.3.0 - Author: Maxi - License: MIT - Download: https://example.com/DeltaVMap-1.3.0.zip - ${thread}`,
+    "StarMap 0.4.7 - Author: StarMap Team - License: MIT - Download: https://example.com/StarMap-0.4.7.zip - Thread: ",
+    "HiddenMod 1.0.0 - Not listed in the content index",
+    "DeltaVMap 9.9.9 - Not listed in the content index",
+  ]);
+  assert.deepEqual(forumLines({ type: "modpack", mods: [{ id: "DeltaVMap", version: "1.2.6" }, { id: "Compendium" }] }, index).at(-1), null);
 });

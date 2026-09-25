@@ -7,13 +7,13 @@ import { renderPreview } from "./markdown.js";
 import { zipNames, inspectArchive, StampError } from "./archive.js";
 import { pullRequestLink, copyAndOpen, rawListingUrl, rawPackUrl, repositoryApiUrl, prefillFromRepository, listingPath, packPath, documentPath } from "./github.js";
 import {
-  memberChoices, versionChoices, defaultVersion, pinNotes, gameMinNotes, packOf, ownIds, nextPackForm, freeVersion, newerNotes, nextVersionNotes,
+  memberChoices, versionChoices, defaultVersion, pinNotes, gameMinNotes, packOf, ownIds, nextPackForm, freeVersion, newerNotes, nextVersionNotes, forumLines,
 } from "./pack.js";
 
 const STORAGE_KEY = "ksa-listing-page/v1";
 const TIMEOUT = 20000;
 const SECTION_INPUTS = { links: "link-forums", compatibility: "game-min" };
-const MANUAL = new Set(["msg-load", "msg-prefill", "msg-output", "msg-pr", "archive-result"]);
+const MANUAL = new Set(["msg-load", "msg-prefill", "msg-output", "msg-pr", "msg-forum-list", "archive-result"]);
 const ROW_MESSAGES = ["link", "dependency", "member"];
 
 const $ = (id) => document.getElementById(id);
@@ -190,6 +190,7 @@ function bindStatic() {
     renderFields();
     refresh();
   });
+  $("copy-forum-list").addEventListener("click", copyForumList);
   $("add-tag").addEventListener("click", addFreeTag);
   $("tag-input").addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
@@ -1248,6 +1249,32 @@ async function versionStillFree() {
     ? `Main already has ${packPath(id, version)}, so the version is now ${free}. Check the file and open the pull request again.`
     : `Main already has ${packPath(id, version)}. Choose a higher version.`);
   return false;
+}
+
+async function copyForumList() {
+  if (!index) {
+    say("msg-forum-list", ERROR, "The list comes from the index snapshot, which has not loaded.");
+    return;
+  }
+  const lines = forumLines(current.document, index);
+  if (!lines.length) {
+    say("msg-forum-list", ERROR, "Add a member first.");
+    return;
+  }
+  if (lines.includes(null)) {
+    say("msg-forum-list", ERROR, "Choose a release for every member first.");
+    return;
+  }
+  const text = lines.join("\n");
+  try {
+    await navigator.clipboard.writeText(text);
+    say("msg-forum-list", null, "Copied. Paste it into the first post of your forum thread.");
+  } catch {
+    const box = element("textarea", { readonly: true, spellcheck: "false", "aria-label": "Member list", rows: text.split("\n").length + 1, text });
+    $("msg-forum-list").replaceChildren(line(NOTE, "The browser did not allow copying. The list is selected, copy it by hand."), box);
+    box.focus();
+    box.select();
+  }
 }
 
 async function loadText(url) {

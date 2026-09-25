@@ -221,3 +221,15 @@ export function nextVersionNotes(document, index, own) {
   }
   return found;
 }
+
+// The member list that forum rule 4.3 asks a pack thread for, in the words Borea
+// writes it. A pin without an id or a release has no line yet, so it gives null.
+export function forumLines(document, index) {
+  return (Array.isArray(document.mods) ? document.mods : []).filter(isObject).map((pin) => {
+    if (typeof pin.id !== "string" || !pin.id || typeof pin.version !== "string" || !pin.version) return null;
+    const listing = index ? index.forum.get(pin.id.toLowerCase()) : undefined;
+    if (!listing || !listing.downloads.has(pin.version)) return `${pin.id} ${pin.version} - Not listed in the content index`;
+    return `${listing.name || listing.id} ${pin.version} - Author: ${listing.authors.join(", ")} - License: ${listing.license}`
+      + ` - Download: ${listing.downloads.get(pin.version)} - Thread: ${listing.forums}`;
+  });
+}

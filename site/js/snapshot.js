@@ -35,6 +35,23 @@ export function releaseStatuses(releases) {
     .map((release) => [release.version, typeof release.release_status === "string" ? release.release_status : ""]));
 }
 
+// The facts of a pack's forum member list, found the way Borea finds them. A pin
+// can name a mod or a mod-loader, and a release that was yanked after the pack
+// was published still has its line.
+function forumFacts(listing, authored) {
+  const forums = forumsOf(authored);
+  return {
+    id: listing.id,
+    name: typeof authored.name === "string" ? authored.name : "",
+    authors: Array.isArray(authored.authors) ? authored.authors.filter((author) => typeof author === "string") : [],
+    license: typeof authored.license === "string" ? authored.license : "",
+    forums: typeof forums === "string" ? forums : "",
+    downloads: new Map((Array.isArray(listing.releases) ? listing.releases : [])
+      .filter((release) => release && typeof release.version === "string")
+      .map((release) => [release.version, release.download && typeof release.download.url === "string" ? release.download.url : ""])),
+  };
+}
+
 // Every version of a pack, retracted ones included, highest first.
 function packVersions(versions) {
   const kept = versions
@@ -54,6 +71,7 @@ export function indexFacts(snapshot, threadPattern) {
   const loaders = [];
   const mods = [];
   const members = [];
+  const forum = new Map();
   const packs = new Map();
   for (const listing of Array.isArray(snapshot.listings) ? snapshot.listings : []) {
     if (!listing || typeof listing.id !== "string") continue;
@@ -71,6 +89,7 @@ export function indexFacts(snapshot, threadPattern) {
       const name = typeof authored.name === "string" ? authored.name : "";
       members.push({ id: listing.id, name, releases: pinnableReleases(listing.releases), statuses: releaseStatuses(listing.releases) });
     }
+    if ((type === "mod" || type === "mod-loader") && !delisted && !forum.has(folded)) forum.set(folded, forumFacts(listing, authored));
   }
   for (const pack of Array.isArray(snapshot.packs) ? snapshot.packs : []) {
     if (!pack || typeof pack.id !== "string") continue;
@@ -95,7 +114,7 @@ export function indexFacts(snapshot, threadPattern) {
   loaders.sort((a, b) => a.id.localeCompare(b.id));
   mods.sort((a, b) => a.localeCompare(b));
   members.sort((a, b) => a.id.localeCompare(b.id));
-  return { holders, threads, threadPattern, loaders, mods, members, packs, gameVersions };
+  return { holders, threads, threadPattern, loaders, mods, members, forum, packs, gameVersions };
 }
 
 export function gameVersionChoices(gameVersions) {
