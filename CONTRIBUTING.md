@@ -120,7 +120,9 @@ A steward must accept this first claim because a pack has no release host that c
 The [listing page](https://ksamodding.github.io/content-index/) writes the first version of a new pack when you set the type to `modpack`.
 You pick each member from the listed mods and their releases that are not yanked, and the page opens GitHub at `packs/<id>/<version>.toml`.
 It does not write `owner.json`, so add that file yourself.
-The page does not yet write a later version of a pack that is in the index, so write that file by hand.
+For a later version, choose "Change a listed one" and load the pack id.
+The page loads the newest version from `main` and raises the version above every version file there, retracted ones included, and it sets the release time to now.
+It shows the reason of a retracted version, marks a member that has a newer release at least as stable as its pin, and opens GitHub at the new file.
 
 The accepted owner record is read only from the base branch.
 Changing owner data in a pull request cannot grant ownership or make that pull request merge itself.

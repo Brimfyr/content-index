@@ -5,8 +5,10 @@ import { emptyForm, emptyRecord, formFromDocument, documentFromForm, isFixedLink
 import { measure, readCapped, LIMITS, MEASURE_FACTOR, ICON, DESCRIPTION } from "./images.js";
 import { renderPreview } from "./markdown.js";
 import { zipNames, inspectArchive, StampError } from "./archive.js";
-import { pullRequestLink, copyAndOpen, rawListingUrl, repositoryApiUrl, prefillFromRepository, listingPath, documentPath } from "./github.js";
-import { memberChoices, versionChoices, defaultVersion, pinNotes, gameMinNotes } from "./pack.js";
+import { pullRequestLink, copyAndOpen, rawListingUrl, rawPackUrl, repositoryApiUrl, prefillFromRepository, listingPath, packPath, documentPath } from "./github.js";
+import {
+  memberChoices, versionChoices, defaultVersion, pinNotes, gameMinNotes, packOf, ownIds, nextPackForm, freeVersion, newerNotes, nextVersionNotes,
+} from "./pack.js";
 
 const STORAGE_KEY = "ksa-listing-page/v1";
 const TIMEOUT = 20000;
@@ -252,15 +254,28 @@ function setMode(mode) {
   refresh();
 }
 
+function loadedBase() {
+  return state.mode === "edit" ? state.base : null;
+}
+
+function packBase() {
+  const base = loadedBase();
+  return base && base.type === "modpack" ? base : null;
+}
+
 function renderMode() {
   const editing = state.mode === "edit";
+  const base = loadedBase();
+  const pack = packBase();
   for (const radio of document.querySelectorAll("input[name=mode]")) radio.checked = radio.value === state.mode;
   $("load").hidden = !editing;
-  $("id").readOnly = editing && Boolean(state.base);
-  // A listing cannot become a pack, which lives at a path of its own.
-  $("type").querySelector("option[value=modpack]").disabled = editing && Boolean(state.base);
-  $("editing").hidden = !(editing && state.base);
-  $("editing").textContent = editing && state.base ? `Changing ${listingPath(state.form.id)}. The id cannot change.` : "";
+  $("id").readOnly = Boolean(base);
+  // A listing cannot become a pack, or a pack a listing, because each lives at a path of its own.
+  for (const option of $("type").options) option.disabled = Boolean(base) && (option.value === "modpack") !== Boolean(pack);
+  $("editing").hidden = !base;
+  $("editing").textContent = pack
+    ? `Making the next version of the pack ${pack.id} after ${pack.version}. It is a new file, and the id cannot change.`
+    : base ? `Changing ${listingPath(state.form.id)}. The id cannot change.` : "";
 }
 
 function renderFields() {
@@ -753,8 +768,17 @@ function renderMessages() {
     if (entry.path === "the document" && input && !input.value && !touched.has(input)) continue;
     if (entry.path === "tags" && entry.level === NOTE && !tagsTouched) continue;
     target.append(line(entry.level, REQUIRED.test(entry.text) ? "Required." : entry.text));
+    if (entry.newer) target.append(element("button", { type: "button", text: `Pin ${entry.newer}`, onclick: () => movePin(entry.path, entry.newer) }));
     if (entry.level === ERROR && input) input.setAttribute("aria-invalid", "true");
   }
+}
+
+function movePin(path, version) {
+  const number = filledRows(state.form.members)[Number(/^mods\[(\d+)\]$/.exec(path)[1])];
+  if (number === undefined) return;
+  state.form.members[number].version = version;
+  renderMembers();
+  refresh();
 }
 
 function invalidInput(entry, target) {
@@ -895,7 +919,7 @@ function renderOutput() {
   const link = $("open-pr");
   link.setAttribute("aria-disabled", blocked ? "true" : "false");
   link.classList.toggle("disabled", blocked);
-  link.textContent = state.mode === "edit" && state.base ? "Open the edit page on GitHub" : "Open pull request on GitHub";
+  link.textContent = loadedBase() && !packBase() ? "Open the edit page on GitHub" : "Open pull request on GitHub";
   const { url, step } = currentLink();
   link.href = url;
   $("pr-step").textContent = step;
@@ -903,16 +927,23 @@ function renderOutput() {
 }
 
 function currentLink() {
-  return pullRequestLink(documentPath(current.document, encodeURIComponent), current.text, state.mode === "edit" && state.base ? state.base.id : null);
+  return pullRequestLink(documentPath(current.document, encodeURIComponent), current.text, loadedBase());
 }
 
 function refresh() {
   if (!checker) return;
-  const own = state.mode === "edit" && state.base ? state.base.id : null;
-  current.document = documentFromForm(state.form, state.mode === "edit" ? state.base : null);
+  const base = loadedBase();
+  const { own, pack } = ownIds(base);
+  current.document = documentFromForm(state.form, base);
   current.text = writeDocument(current.document);
   current.messages = checker.check(current.document, { index, own, gameVersions: index ? index.gameVersions : null });
-  current.messages.push(...extraMessages(), ...pinNotes(current.document, index), ...gameMinNotes(current.document, index));
+  current.messages.push(
+    ...extraMessages(),
+    ...pinNotes(current.document, index),
+    ...gameMinNotes(current.document, index),
+    ...newerNotes(current.document, index),
+    ...nextVersionNotes(current.document, index, pack),
+  );
   const explained = new Set(current.messages.filter((entry) => SPDX_DETAIL.test(entry.text)).map((entry) => entry.path));
   current.messages = current.messages.filter((entry) => !(explained.has(entry.path) && SPDX_SHAPE.test(entry.text)));
   const count = Array.from(state.form.abstract.trim()).length;
@@ -944,10 +975,10 @@ function renderAll() {
   refresh();
 }
 
-async function fetchListing(id) {
+async function fetchRaw(url, path) {
   try {
-    const response = await fetch(rawListingUrl(id), { cache: "no-store", signal: AbortSignal.timeout(TIMEOUT) });
-    if (response.status === 404) return { error: `There is no ${listingPath(id)} on main.` };
+    const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(TIMEOUT) });
+    if (response.status === 404) return { error: `There is no ${path} on main.`, missing: true };
     if (!response.ok) return { error: `GitHub answered HTTP ${response.status}.` };
     return { text: await response.text() };
   } catch {
@@ -955,8 +986,18 @@ async function fetchListing(id) {
   }
 }
 
+function fetchListing(id) {
+  return fetchRaw(rawListingUrl(id), listingPath(id));
+}
+
+async function packVersionTaken(id, version) {
+  const answer = await fetchRaw(rawPackUrl(id, version), packPath(id, version));
+  if (answer.error && !answer.missing) throw new Error(answer.error);
+  return !answer.missing;
+}
+
 async function checkBase() {
-  if (state.mode !== "edit" || !state.base) return;
+  if (state.mode !== "edit" || !state.base || packBase()) return;
   const { base, baseText } = state;
   const answer = await fetchListing(base.id);
   if (state.base !== base || answer.text === baseText) return;
@@ -981,27 +1022,67 @@ async function loadListing() {
     return;
   }
   const holder = index && index.holders.get(typed.toLowerCase());
+  if (holder && holder.type === "modpack") {
+    await loadPack(holder.id);
+    return;
+  }
   const id = holder ? holder.id : typed;
   say("msg-load", null, `Loading ${listingPath(id)}.`);
   const answer = await fetchListing(id);
   if (answer.error) {
-    say("msg-load", ERROR, answer.error);
+    // Only the snapshot tells a pack id from a listing id.
+    say("msg-load", ERROR, answer.missing && !index ? `${answer.error} A pack loads once the index snapshot has loaded.` : answer.error);
     return;
   }
-  const text = answer.text;
-  let base;
+  const base = parseBase(answer.text, "listing");
+  if (base) useBase(answer.text, base, formFromDocument(base), `Loaded ${listingPath(id)}.`);
+}
+
+function parseBase(text, kind) {
   try {
-    base = parseDocument(text);
+    return parseDocument(text);
   } catch (error) {
-    say("msg-load", ERROR, `The listing is not valid TOML: ${error.message}`);
-    return;
+    say("msg-load", ERROR, `The ${kind} is not valid TOML: ${error.message}`);
+    return null;
   }
-  state = { mode: "edit", baseText: text, base, form: formFromDocument(base) };
+}
+
+function useBase(text, base, form, loaded) {
+  state = { mode: "edit", baseText: text, base, form };
   archiveNames = null;
   archiveTicket = null;
   $("archive").value = "";
-  say("msg-load", null, `Loaded ${listingPath(id)}.`);
+  say("msg-load", null, loaded);
   renderAll();
+}
+
+// The newest version is the base, and the next version is raised above every
+// version file on main, retracted ones included.
+async function loadPack(id) {
+  const pack = packOf(index, id);
+  if (!pack || !pack.versions.length) {
+    say("msg-load", ERROR, `The index snapshot has no version of the pack ${id}.`);
+    return;
+  }
+  const newest = pack.versions[0].version;
+  say("msg-load", null, `Loading ${packPath(id, newest)}.`);
+  const answer = await fetchRaw(rawPackUrl(id, newest), packPath(id, newest));
+  if (answer.error) {
+    say("msg-load", ERROR, answer.error);
+    return;
+  }
+  const base = parseBase(answer.text, "pack version");
+  if (!base) return;
+  const form = nextPackForm(base, pack);
+  let loaded = `Loaded ${packPath(id, newest)}. The next version is ${form.version}.`;
+  try {
+    const free = await freeVersion(form.version, (version) => packVersionTaken(id, version));
+    if (free && free !== form.version) loaded = `Loaded ${packPath(id, newest)}. Main already has ${form.version}, so the next version is ${free}.`;
+    form.version = free || form.version;
+  } catch (error) {
+    loaded += ` The page could not check that main has no such file yet, and checks it again before the pull request. ${error.message}`;
+  }
+  useBase(answer.text, base, form, loaded);
 }
 
 async function prefill() {
@@ -1129,6 +1210,7 @@ async function openPullRequest(event) {
     return;
   }
   event.preventDefault();
+  if (packBase() && !(await versionStillFree())) return;
   const { url, step } = currentLink();
   const { copied, opened } = await copyAndOpen(url, current.text, navigator.clipboard, (address) => window.open(address, "_blank"));
   const lines = [];
@@ -1144,6 +1226,28 @@ async function openPullRequest(event) {
     lines.push(note);
   }
   $("msg-pr").replaceChildren(...lines);
+}
+
+// A version merged since the pack was loaded takes the proposed path, so the
+// version is raised again and the author sees the new file before it opens.
+async function versionStillFree() {
+  const { id, version } = current.document;
+  let free;
+  try {
+    free = await freeVersion(version, (proposed) => packVersionTaken(id, proposed));
+  } catch {
+    return true;
+  }
+  if (free === version) return true;
+  if (free) {
+    state.form.version = free;
+    renderFields();
+    refresh();
+  }
+  say("msg-pr", NOTE, free
+    ? `Main already has ${packPath(id, version)}, so the version is now ${free}. Check the file and open the pull request again.`
+    : `Main already has ${packPath(id, version)}. Choose a higher version.`);
+  return false;
 }
 
 async function loadText(url) {

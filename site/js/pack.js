@@ -1,8 +1,11 @@
-import { NOTE } from "./rules.js";
+import { ERROR, NOTE, semverCompare } from "./rules.js";
+import { formFromDocument, releaseTime } from "./model.js";
 
 const REVISION_BOUND = /^[0-9]{4}\.[0-9]+\.[0-9]+\.([0-9]+)$/;
 const MONTH_BOUND = /^([0-9]{4})\.([0-9]+)$/;
 const MONTH = /^([0-9]{4})\.([0-9]+)\./;
+const SEMVER = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[^+]+)?(\+.*)?$/;
+const STABILITY = ["stable", "testing", "dev"];
 
 function isObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -97,4 +100,124 @@ export function gameMinNotes(document, index) {
     path: "compatibility.game_min",
     text: `the pinned releases need at least '${release.gameMin}', the highest game_min among them, so that is the proposed oldest game version`,
   }];
+}
+
+// The ids that the checks of a loaded document treat as its own. Only a loaded
+// pack is a later version of a listed pack.
+export function ownIds(base) {
+  const own = isObject(base) && typeof base.id === "string" ? base.id : null;
+  return { own, pack: own && base.type === "modpack" ? own : null };
+}
+
+export function packOf(index, id) {
+  return index && typeof id === "string" && id ? index.packs.get(id.toLowerCase()) || null : null;
+}
+
+// The next version by SemVer, raised as npm raises a patch. A prerelease becomes
+// its own release, and any other version gets the next patch number.
+export function raiseVersion(version) {
+  const parts = typeof version === "string" ? SEMVER.exec(version) : null;
+  if (!parts) return null;
+  const [major, minor, patch] = parts.slice(1, 4).map(Number);
+  return parts[4] ? `${major}.${minor}.${patch}` : `${major}.${minor}.${patch + 1}`;
+}
+
+// The loaded version stays as it is except for the keys that belong to one version.
+export function nextPackForm(base, pack, now = new Date()) {
+  const form = formFromDocument(base);
+  const highest = pack && pack.versions.length ? pack.versions[0].version : base.version;
+  form.version = raiseVersion(highest) || "";
+  form.releasedAt = releaseTime(now);
+  form.changelog = "";
+  return form;
+}
+
+// The snapshot follows main with a delay, so a version it does not know can
+// already be a file there. taken answers whether that file exists.
+export async function freeVersion(version, taken, tries = 20) {
+  let proposed = version;
+  for (let attempt = 0; attempt < tries && proposed; attempt += 1) {
+    if (!(await taken(proposed))) return proposed;
+    proposed = raiseVersion(proposed);
+  }
+  return null;
+}
+
+function stability(status) {
+  const rank = STABILITY.indexOf(status);
+  return rank < 0 ? STABILITY.length : rank;
+}
+
+// A pin on a yanked release keeps the stability of that release. A pin whose
+// release the snapshot does not have at all is held to stable, the strictest level.
+export function newerRelease(index, pin) {
+  const member = isObject(pin) ? memberOf(index, pin.id) : null;
+  if (!member) return null;
+  const least = stability(member.statuses.has(pin.version) ? member.statuses.get(pin.version) : "stable");
+  return member.releases.find((release) =>
+    semverCompare(release.version, pin.version) > 0 && stability(release.status) <= least) || null;
+}
+
+export function newerNotes(document, index) {
+  if (!index || document.type !== "modpack") return [];
+  const found = [];
+  (Array.isArray(document.mods) ? document.mods : []).forEach((pin, number) => {
+    const release = newerRelease(index, pin);
+    if (!release) return;
+    found.push({
+      level: NOTE,
+      path: `mods[${number}]`,
+      text: `'${pin.id}' has a newer ${release.status ? `${release.status} ` : ""}release '${release.version}'; the pin stays until you move it`,
+      newer: release.version,
+    });
+  });
+  return found;
+}
+
+function names(reason, id) {
+  const escaped = id.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&");
+  return new RegExp(`(?<![A-Za-z0-9._-])${escaped}(?![A-Za-z0-9_-]|\\.[A-Za-z0-9])`, "i").test(reason);
+}
+
+function later(a, b) {
+  const [left, right] = [Date.parse(a), Date.parse(b)];
+  return Number.isNaN(left) || Number.isNaN(right) || left > right;
+}
+
+// The notes and errors of a later version of a listed pack, whose id is own.
+export function nextVersionNotes(document, index, own) {
+  const pack = document.type === "modpack" ? packOf(index, own) : null;
+  if (!pack) return [];
+  const found = [];
+  if (pack.status) {
+    found.push({ level: NOTE, path: "id", text: `the index marks this pack ${pack.status.state}${pack.status.reason ? `: ${pack.status.reason}` : ""}` });
+  }
+  const pins = Array.isArray(document.mods) ? document.mods : [];
+  for (const { version, retracted } of pack.versions) {
+    if (!retracted) continue;
+    const reason = typeof retracted.reason === "string" ? retracted.reason : "";
+    found.push({ level: NOTE, path: "version", text: `version '${version}' of this pack is retracted${reason ? `: ${reason}` : ""}` });
+    pins.forEach((pin, number) => {
+      if (reason && isObject(pin) && typeof pin.id === "string" && names(reason, pin.id)) {
+        found.push({ level: NOTE, path: `mods[${number}]`, text: `the retraction of version '${version}' names '${pin.id}': ${reason}` });
+      }
+    });
+  }
+  const highest = pack.versions[0];
+  if (highest && (semverCompare(document.version, highest.version) ?? 1) <= 0) {
+    found.push({
+      level: ERROR,
+      path: "version",
+      text: `'${document.version}' is not higher than '${highest.version}', the highest version of this pack, retracted ones included`,
+    });
+  }
+  const newest = pack.versions.filter((entry) => entry.releasedAt).sort((a, b) => Date.parse(b.releasedAt) - Date.parse(a.releasedAt))[0];
+  if (newest && typeof document.released_at === "string" && !later(document.released_at, newest.releasedAt)) {
+    found.push({
+      level: ERROR,
+      path: "released_at",
+      text: `'${document.released_at}' is not later than '${newest.releasedAt}', the release time of version '${newest.version}'`,
+    });
+  }
+  return found;
 }

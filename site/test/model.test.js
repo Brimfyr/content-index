@@ -119,7 +119,7 @@ test("a new listing gets the plain link and the paste step once the link would p
 });
 
 test("a changed listing opens the edit page and says to replace the whole file", () => {
-  assert.deepEqual(pullRequestLink(listingPath("MyMod"), "id = \"MyMod\"\n", "MyMod"), {
+  assert.deepEqual(pullRequestLink(listingPath("MyMod"), "id = \"MyMod\"\n", { id: "MyMod", type: "mod" }), {
     url: "https://github.com/KSAModding/content-index/edit/main/listings/MyMod.toml",
     step: PASTE_EDIT,
   });

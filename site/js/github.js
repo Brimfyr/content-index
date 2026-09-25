@@ -20,8 +20,17 @@ export function documentPath(document, encode = (part) => part) {
   return document.type === "modpack" ? packPath(id, encode(String(document.version || "<version>"))) : listingPath(id);
 }
 
+// Raw GitHub, not the contents API, which allows 60 calls an hour without a token.
+export function rawFileUrl(encodedPath) {
+  return `https://raw.githubusercontent.com/${INDEX_REPOSITORY}/main/${encodedPath}`;
+}
+
 export function rawListingUrl(id) {
-  return `https://raw.githubusercontent.com/${INDEX_REPOSITORY}/main/${listingPath(encodeURIComponent(id))}`;
+  return rawFileUrl(listingPath(encodeURIComponent(id)));
+}
+
+export function rawPackUrl(id, version) {
+  return rawFileUrl(packPath(encodeURIComponent(id), encodeURIComponent(version)));
 }
 
 export function newFileUrl(encodedPath, text) {
@@ -34,8 +43,10 @@ export function editUrl(id) {
   return `https://github.com/${INDEX_REPOSITORY}/edit/main/${listingPath(encodeURIComponent(id))}`;
 }
 
-export function pullRequestLink(encodedPath, text, baseId = null) {
-  if (baseId) return { url: editUrl(baseId), step: PASTE_EDIT };
+// A loaded listing is changed in place. A loaded pack version is immutable, so
+// its next version is always a new file.
+export function pullRequestLink(encodedPath, text, base = null) {
+  if (base && base.type !== "modpack") return { url: editUrl(base.id), step: PASTE_EDIT };
   const link = newFileUrl(encodedPath, text);
   return { url: link.url, step: link.filled ? "" : PASTE_NEW };
 }
