@@ -692,7 +692,7 @@ li.note {
 .item input,
 .item select,
 .item textarea {
-  background: var(--surface);
+  background-color: var(--surface);
 }
 
 .item > * + * {
