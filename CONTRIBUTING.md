@@ -166,13 +166,15 @@ A marker file in a fork does not count, because a fork inherits the files of the
 A listing from a fork, for example the continuation of an abandoned mod, needs an id of its own, because the original listing keeps its id.
 Pointing an existing listing at a fork is a change of release host, see [Changing a listing that already exists](#changing-a-listing-that-already-exists).
 
-A SpaceDock release host is verified through the mod's source code link.
+A SpaceDock release host is verified through the mod's source code link, per [RFC 0079](https://github.com/KSAModding/content-manager-design/blob/main/rfcs/0079-author-freedom.md).
 Set that link on the mod's SpaceDock page to your GitHub repository, and prove control of the repository with one of the three proofs above.
 
 So the mod's authors decide which repository stands for the mod, and whoever controls that repository can list it.
 A linked fork proves control only through its owner or the topic, as above.
 When you rename or transfer it, update the link on SpaceDock, because the redirect rule below covers only a repository the listing itself names.
 A SpaceDock mod with no source code link, or with a link that does not name a GitHub repository, still waits for a steward.
+When SpaceDock does not answer, the check reaches no verdict, and the pull request also waits for a steward.
+Release and amendment pull requests in content-index-releases use the same proof.
 
 ## Changing a listing that already exists
 
