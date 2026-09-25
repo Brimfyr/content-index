@@ -193,6 +193,25 @@
             <div id="msg-changelog" class="messages" aria-live="polite"></div>
           </div>
         </div>
+        <div class="field">
+          <label for="owner-login">Your GitHub login</label>
+          <div class="row">
+            <input id="owner-login" autocomplete="off" spellcheck="false" aria-describedby="hint-owner msg-owner">
+            <button type="button" id="owner-check" class="beside">Check the id</button>
+          </div>
+          <div class="aside">
+            <p id="hint-owner" class="hint">The page says whether the pack id is free, yours, or held by another account, in which case a steward decides. For a free id it writes <code>owner.json</code> from your login and your numeric account id on GitHub.</p>
+            <div id="msg-owner" class="messages" aria-live="polite"></div>
+          </div>
+        </div>
+        <div id="owner-claim" class="field" hidden>
+          <p id="owner-claim-text" class="note"></p>
+          <p class="row">
+            <button type="button" id="copy-owner" class="secondary">Copy owner.json</button>
+            <button type="button" id="save-owner" class="secondary">Save owner.json</button>
+          </p>
+          <div id="msg-owner-file" class="messages" aria-live="polite"></div>
+        </div>
       </section>
 
       <section class="card" aria-labelledby="section-members" id="members-section" hidden>
@@ -448,8 +467,8 @@
         </ol>
         <ol class="next" id="pack-steps" hidden>
           <li>GitHub asks you to sign in, makes a copy of the index in your account (a fork) and opens its editor at the path of the new version. The button copies your file first. A pack is almost always too long for the link, so paste the copy into the empty file.</li>
-          <li>The first version of a pack also adds <code>packs/&lt;id&gt;/owner.json</code> with your GitHub login and numeric account id, in the same pull request. <a href="https://github.com/KSAModding/content-index/blob/main/packs/README.md">packs/README.md</a> shows the file.</li>
-          <li>A bot checks the file and comments with its verdict. A steward accepts the first claim of a pack id. For a later version, choose "Change a listed one" and load the pack. Only the first version adds <code>owner.json</code>.</li>
+          <li>The first version of a pack id that main does not have yet is its first claim, which also adds <code>packs/&lt;id&gt;/owner.json</code> with your GitHub login and numeric account id to the same pull request. Open the pull request with the version. The bot answers with a link that adds <code>owner.json</code> to it, and the checks stay red until that file is there. "Check the id" in the Pack section also gives the file. <a href="https://github.com/KSAModding/content-index/blob/main/packs/README.md">packs/README.md</a> shows it.</li>
+          <li>A bot checks the files and comments with its verdict, and the checks decide what happens next. The checks of a new GitHub account can wait until a steward starts them. For a later version, choose "Change a listed one" and load the pack. Only the first version adds <code>owner.json</code>.</li>
         </ol>
         <p id="organization-note" class="note" hidden></p>
         <p class="hint">Your listing stays in this browser until you open the pull request. Details are in <a href="https://github.com/KSAModding/content-index/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>.</p>
