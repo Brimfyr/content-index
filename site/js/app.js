@@ -1143,7 +1143,7 @@ async function prefill() {
   fill("bug tracker", ["links", "bugtracker"], facts.bugtracker);
   renderFields();
   const notes = [filled.length ? `Filled ${filled.join(", ")}. Check each value.` : "Nothing to fill, the fields already have values."];
-  if (facts.fork) notes.push("The repository is a fork, so the first ownership proof, a repository in your own account, does not apply.");
+  if (facts.fork) notes.push("The repository is a fork, so it proves ownership through its owner or the topic, not through a marker file. Give the listing an id of its own, because the original listing keeps its id.");
   say("msg-prefill", null, notes.join(" "));
   $("organization-note").textContent = facts.organization
     ? `${facts.owner} is an organization. Add the topic ksa-index-<your-github-username>, in lowercase, to ${repository}, or ask an owner of ${facts.owner} to add it.`
