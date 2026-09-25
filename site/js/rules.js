@@ -12,6 +12,7 @@ export const ABSTRACT_LIMIT = 280;
 export const TAGS_SPEC = "https://github.com/KSAModding/content-manager-design/blob/main/spec/tags.md";
 const SPDX_LIST = "https://spdx.org/licenses/";
 const TAG_VOCABULARY = { mod: "mod", "mod-loader": "mod", modpack: "mod" };
+const PINNED_SECTIONS = ["mods", "vehicles", "saves"];
 
 const REVISION_BOUND = /^[0-9]{4}\.[0-9]+\.[0-9]+\.([0-9]+)(?![\s\S])/;
 const MONTH_BOUND = /^([0-9]{4})\.([0-9]+)(?![\s\S])/;
@@ -297,6 +298,22 @@ function checkDependencies(document, own, found) {
   });
 }
 
+function checkPins(document, own, found) {
+  const pinned = new Map();
+  for (const section of PINNED_SECTIONS) {
+    const entries = document[section];
+    if (!Array.isArray(entries)) continue;
+    entries.forEach((entry, index) => {
+      const identifier = isObject(entry) ? fold(entry.id) : null;
+      if (identifier === null) return;
+      const where = `${section}[${index}]`;
+      if (identifier === own) found.push(message(ERROR, where, "a pack cannot pin itself"));
+      else if (pinned.has(identifier)) found.push(message(ERROR, where, `'${entry.id}' is pinned by ${pinned.get(identifier)}`));
+      if (!pinned.has(identifier)) pinned.set(identifier, where);
+    });
+  }
+}
+
 export function documentRules(document) {
   const found = [];
   const own = fold(document.id);
@@ -311,6 +328,7 @@ export function documentRules(document) {
     if (fold(document.loader.id) === own) found.push(message(ERROR, "loader", "a listing cannot be its own loader"));
   }
   checkDependencies(document, own, found);
+  checkPins(document, own, found);
   return found;
 }
 
@@ -550,6 +568,16 @@ export function indexRules(document, index, own) {
         if (type && type !== "mod") {
           found.push(message(ERROR, where, `'${member.id}' is listed as a ${type}, and a dependency has to be a mod`));
         }
+      }
+    });
+  }
+  for (const section of PINNED_SECTIONS) {
+    if (!Array.isArray(document[section])) continue;
+    document[section].forEach((member, number) => {
+      if (!isObject(member)) return;
+      const where = `${section}[${number}]`;
+      if (resolve(member.id, where) === "modpack") {
+        found.push(message(ERROR, where, `'${member.id}' is itself a pack, and a pack does not nest in spec_version 1`));
       }
     });
   }

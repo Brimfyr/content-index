@@ -866,6 +866,29 @@
       "noted": true,
       "says": "281 characters is longer than 280",
       "toml": "spec_version = 1\nid = \"ExampleMod\"\ntype = \"mod\"\nname = \"Example Mod\"\nauthors = [\"Example Author\"]\nabstract = \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.\"\nlicense = \"MIT\"\ntags = [\"gameplay\"]\n\n[releases]\ngithub = \"example/ExampleMod\"\n\n[links]\nforums = \"https://forums.ahwoo.com/threads/example-mod.123/\"\n\n[compatibility]\ngame_min = \"2026.9.10.5438\"\n"
+    },
+    {
+      "name": "a minimal pack",
+      "rule": "schema",
+      "accepted": true,
+      "noted": false,
+      "toml": "spec_version = 1\nid = \"ExamplePack\"\ntype = \"modpack\"\nname = \"Example Pack\"\nauthors = [\"Example Author\"]\nabstract = \"Two mods for mission planning.\"\nlicense = \"MIT\"\ntags = [\"user-interface\"]\nversion = \"1.0.0\"\nreleased_at = \"2026-09-25T12:00:00Z\"\n\n[links]\nforums = \"https://forums.ahwoo.com/threads/example-pack.1/\"\n\n[compatibility]\ngame_min = \"2026.9.22.5482\"\n\n[[mods]]\nid = \"DeltaVMap\"\nversion = \"1.0.0\"\n\n[[mods]]\nid = \"Compendium\"\nversion = \"1.0.0\"\n"
+    },
+    {
+      "name": "a pack pins a mod once",
+      "rule": "id",
+      "accepted": false,
+      "noted": false,
+      "says": "'deltavmap' is pinned by mods[0]",
+      "toml": "spec_version = 1\nid = \"ExamplePack\"\ntype = \"modpack\"\nname = \"Example Pack\"\nauthors = [\"Example Author\"]\nabstract = \"Two mods for mission planning.\"\nlicense = \"MIT\"\ntags = [\"user-interface\"]\nversion = \"1.0.0\"\nreleased_at = \"2026-09-25T12:00:00Z\"\n\n[links]\nforums = \"https://forums.ahwoo.com/threads/example-pack.1/\"\n\n[compatibility]\ngame_min = \"2026.9.22.5482\"\n\n[[mods]]\nid = \"DeltaVMap\"\nversion = \"1.0.0\"\n\n[[mods]]\nid = \"deltavmap\"\nversion = \"1.0.0\"\n"
+    },
+    {
+      "name": "a pack cannot pin itself",
+      "rule": "id",
+      "accepted": false,
+      "noted": false,
+      "says": "a pack cannot pin itself",
+      "toml": "spec_version = 1\nid = \"ExamplePack\"\ntype = \"modpack\"\nname = \"Example Pack\"\nauthors = [\"Example Author\"]\nabstract = \"Two mods for mission planning.\"\nlicense = \"MIT\"\ntags = [\"user-interface\"]\nversion = \"1.0.0\"\nreleased_at = \"2026-09-25T12:00:00Z\"\n\n[links]\nforums = \"https://forums.ahwoo.com/threads/example-pack.1/\"\n\n[compatibility]\ngame_min = \"2026.9.22.5482\"\n\n[[mods]]\nid = \"examplepack\"\nversion = \"1.0.0\"\n"
     }
   ]
 }

@@ -69,6 +69,17 @@ test("a loader must be a mod-loader and a dependency a mod, in the listed spelli
   assert.ok(found.includes("dependencies[0]: 'starmap' is listed as a mod-loader, and a dependency has to be a mod"), found.join("\n"));
 });
 
+test("a pin of a pack, of another spelling or of the same mod twice is an error, as in the index checks", () => {
+  const pack = mod({ type: "modpack", version: "1.0.0", released_at: "2026-09-25T12:00:00Z" });
+  pack.mods = [{ id: "BigPack", version: "1.0.0" }, { id: "othermod", version: "1.0.0" }, { id: "OtherMod", version: "1.1.0" }];
+  const errors = texts(checker.check(pack, { index }), ERROR);
+  assert.deepEqual(errors, [
+    "mods[2]: 'OtherMod' is pinned by mods[1]",
+    "mods[0]: 'BigPack' is itself a pack, and a pack does not nest in spec_version 1",
+    "mods[1]: 'othermod' does not use the canonical id spelling 'OtherMod'",
+  ]);
+});
+
 test("a forums thread another listing names gives a note, by thread id", () => {
   const found = texts(checker.check(mod({ links: { forums: "https://forums.ahwoo.com/index.php?threads/other.500/" } }), { index }), NOTE);
   assert.deepEqual(found, [
