@@ -56,8 +56,16 @@ class FakeApi:
         return self.spacedock.get(mod_id)
 
 
-def repository(full_name, owner_id=1, fork=False):
-    return {"full_name": full_name, "fork": fork, "owner": {"id": owner_id}}
+def repository(full_name, owner_id=1, fork=False, login="Maxi", kind="User"):
+    return {
+        "full_name": full_name,
+        "fork": fork,
+        "owner": {"id": owner_id, "login": login, "type": kind},
+    }
+
+
+def organization(full_name="Maxi/KSA-AutoStage", fork=False):
+    return {full_name: repository(full_name, owner_id=50, fork=fork, login="Maxi", kind="Organization")}
 
 
 def spacedock_mod(source_code="https://github.com/Maxi/KSA-AutoStage", mod_id=4253, **fields):
@@ -462,6 +470,124 @@ class SpaceDockWithoutReader(unittest.TestCase):
             self.assertEqual(
                 results[name].reason, "SpaceDock did not answer about mod 4253: timed out"
             )
+
+
+class OwnerLogins(unittest.TestCase):
+    """The accounts the proofs name as a listing's owners, for a mention."""
+
+    MARKER = ("Maxi/KSA-AutoStage", ownership.MARKER_PATH)
+
+    def owners(self, api, document=None):
+        return ownership.owner_logins(document or LISTING, api)
+
+    def test_a_personal_repository_names_its_owner(self):
+        api = FakeApi(
+            {"Maxi/KSA-AutoStage": repository("Maxi/KSA-AutoStage", login="Maxi")},
+            topics={"Maxi/KSA-AutoStage": ["ksa-index-helper"]},
+        )
+        self.assertEqual(self.owners(api), (("Maxi",), ""))
+
+    def test_an_organization_repository_names_its_topic(self):
+        api = FakeApi(organization(), topics={"Maxi/KSA-AutoStage": ["ksa", "ksa-index-alice"]})
+        self.assertEqual(self.owners(api), (("alice",), ""))
+
+    def test_an_organization_repository_names_its_marker_file(self):
+        api = FakeApi(organization(), files={self.MARKER: 'id = "AutoStage"\nlogin = "Bob"\n'})
+        self.assertEqual(self.owners(api), (("Bob",), ""))
+
+    def test_every_topic_and_the_marker_file_are_named_once(self):
+        api = FakeApi(
+            organization(),
+            topics={"Maxi/KSA-AutoStage": ["ksa-index-bob", "ksa-index-alice"]},
+            files={self.MARKER: 'login = "Bob"\n'},
+        )
+        self.assertEqual(self.owners(api), (("alice", "bob"), ""))
+
+    def test_a_marker_file_for_another_listing_names_nobody(self):
+        api = FakeApi(organization(), files={self.MARKER: 'id = "Other"\nlogin = "Bob"\n'})
+        logins, reason = self.owners(api)
+        self.assertEqual(logins, ())
+        self.assertIn("names an owner", reason)
+
+    def test_a_login_github_cannot_carry_is_never_named(self):
+        # The mention lands in a comment the index App posts.
+        api = FakeApi(organization(), files={self.MARKER: 'login = "@stewards **x**"\n'})
+        self.assertEqual(self.owners(api)[0], ())
+
+    def test_a_fork_of_a_person_names_the_account_that_forked_it(self):
+        api = FakeApi({"Maxi/KSA-AutoStage": repository("Maxi/KSA-AutoStage", fork=True, login="Carol")})
+        self.assertEqual(self.owners(api), (("Carol",), ""))
+
+    def test_a_fork_of_an_organization_names_its_topic_and_not_its_marker_file(self):
+        marker = {self.MARKER: 'login = "Parent"\n'}
+        api = FakeApi(organization(fork=True), files=marker)
+        logins, reason = self.owners(api)
+        self.assertEqual(logins, ())
+        self.assertIn("on the fork", reason)
+
+        api = FakeApi(
+            organization(fork=True), files=marker, topics={"Maxi/KSA-AutoStage": ["ksa-index-dave"]}
+        )
+        self.assertEqual(self.owners(api), (("dave",), ""))
+
+    def test_the_placeholder_of_a_no_owner_reason_stays_in_a_code_span(self):
+        # A GitHub comment hides a bare <login> as an HTML tag.
+        for fork in (False, True):
+            _, reason = self.owners(FakeApi(organization(fork=fork)))
+            self.assertIn("`ksa-index-<login>`", reason, fork)
+            self.assertNotIn("<", reason.replace("`ksa-index-<login>`", ""), fork)
+        _, reason = self.owners(FakeApi(organization()))
+        self.assertIn(f"`{ownership.MARKER_PATH}`", reason)
+
+    def test_a_spacedock_mod_names_the_owner_of_its_linked_repository(self):
+        api = FakeApi(
+            {"Maxi/KSA-AutoStage": repository("Maxi/KSA-AutoStage", login="Maxi")},
+            spacedock={"4253": spacedock_mod()},
+        )
+        self.assertEqual(self.owners(api, SPACEDOCK_LISTING), (("Maxi",), ""))
+
+    def test_a_spacedock_mod_without_a_link_names_nobody(self):
+        api = FakeApi(spacedock={"4253": spacedock_mod(None)})
+        logins, reason = self.owners(api, SPACEDOCK_LISTING)
+        self.assertEqual(logins, ())
+        self.assertIn("no source code link", reason)
+
+    def test_lookups_without_a_spacedock_reader_still_read_spacedock(self):
+        api = GitHubOnlyApi(FakeApi({"Maxi/KSA-AutoStage": repository("Maxi/KSA-AutoStage")}))
+        opener = mock.Mock(return_value=io.BytesIO(json.dumps(spacedock_mod()).encode()))
+        with mock.patch.object(ownership.urllib.request, "urlopen", opener):
+            self.assertEqual(self.owners(api, SPACEDOCK_LISTING), (("Maxi",), ""))
+
+    def test_no_owner_comes_with_the_reason(self):
+        cases = {
+            "does not exist or is private": FakeApi(),
+            "is stale": FakeApi({"Maxi/KSA-AutoStage": repository("Maxi/Renamed")}),
+            "names an owner": FakeApi(organization()),
+            "no ownership proof": FakeApi(),
+        }
+        for expected, api in cases.items():
+            document = {"releases": {"gitlab": "a/b"}} if expected == "no ownership proof" else None
+            logins, reason = self.owners(api, document)
+            self.assertEqual(logins, (), expected)
+            self.assertIn(expected, reason)
+
+    def test_a_host_that_does_not_answer_is_a_reason_and_not_an_error(self):
+        for stage, document in (
+            ("repository", LISTING),
+            ("topics", LISTING),
+            ("file", LISTING),
+            ("spacedock", SPACEDOCK_LISTING),
+        ):
+            api = FakeApi(organization(), spacedock={"4253": spacedock_mod()}, unavailable=[stage])
+            logins, reason = self.owners(api, document)
+            self.assertEqual(logins, (), stage)
+            self.assertIn("did not answer", reason, stage)
+
+    def test_a_marker_file_that_does_not_answer_keeps_the_topics(self):
+        api = FakeApi(
+            organization(), topics={"Maxi/KSA-AutoStage": ["ksa-index-alice"]}, unavailable=["file"]
+        )
+        self.assertEqual(self.owners(api), (("alice",), ""))
 
 
 def hosted_at(repository, identifier="AutoStage"):

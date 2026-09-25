@@ -93,6 +93,29 @@ class PackOwnership(unittest.TestCase):
         self.assertIn(OWNER, result.reason)
 
 
+class OwnerRecord(unittest.TestCase):
+    def test_the_owner_is_read_from_owner_json_on_the_base_branch(self):
+        api = Api({(OWNER, BASE): owner("Victim", 8), (OWNER, HEAD): owner()})
+        record, reason = pack_ownership.owner_record(api, "Starter", BASE)
+        self.assertEqual(record, {"github_login": "Victim", "github_id": 8})
+        self.assertIsNone(reason)
+
+    def test_a_pack_without_a_record_has_no_owner_yet(self):
+        self.assertEqual(pack_ownership.owner_record(Api(), "Starter", BASE), (None, None))
+
+    def test_a_record_that_does_not_parse_says_why(self):
+        record, reason = pack_ownership.owner_record(Api({(OWNER, BASE): "not json"}), "Starter", BASE)
+        self.assertIsNone(record)
+        self.assertIn("not valid JSON", reason)
+
+    def test_an_id_that_is_not_plain_is_never_read(self):
+        api = Api()
+        record, reason = pack_ownership.owner_record(api, "My Pack", BASE)
+        self.assertIsNone(record)
+        self.assertTrue(reason)
+        self.assertEqual(api.reads, [])
+
+
 class RecordText(unittest.TestCase):
     def test_it_is_written_as_the_records_in_packs_are(self):
         record = Path(__file__).resolve().parent.parent / RECORDED
