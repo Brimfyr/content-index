@@ -246,7 +246,7 @@ def renamed_into(base, submitted, api):
         return False
 
     repository = api.repository(base_target)
-    if repository is None or repository.get("fork"):
+    if repository is None:
         return False
 
     return (repository.get("full_name") or "").lower() == target.lower()

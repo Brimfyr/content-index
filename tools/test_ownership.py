@@ -610,11 +610,69 @@ class VerifyChange(unittest.TestCase):
         self.assertEqual(result.state, ownership.UNVERIFIED)
         self.assertIn("already names", result.reason)
 
-    def test_a_fork_never_stands_in_for_a_rename(self):
-        api = FakeApi({"Maxi/Old": repository("Maxi/New", owner_id=7, fork=True)})
-        self.assertFalse(
-            ownership.renamed_into(hosted_at("Maxi/Old"), hosted_at("Maxi/New"), api)
+    def test_a_renamed_fork_stays_self_service(self):
+        api = FakeApi(
+            {
+                "Maxi/Old": repository("Maxi/New", owner_id=7, fork=True),
+                "Maxi/New": repository("Maxi/New", owner_id=7, fork=True),
+            }
         )
+        result = self.change(api, hosted_at("Maxi/Old"), hosted_at("Maxi/New"), login="Maxi")
+        self.assertEqual(result.state, ownership.VERIFIED)
+        self.assertEqual(result.proof, "owner id")
+
+    def test_a_renamed_fork_does_not_verify_through_its_marker_file(self):
+        marker = 'id = "AutoStage"\nlogin = "Maxi"\n'
+        api = FakeApi(
+            {
+                "Maxi/Old": repository("Maxi/New", owner_id=99, fork=True),
+                "Maxi/New": repository("Maxi/New", owner_id=99, fork=True),
+            },
+            files={("Maxi/New", ownership.MARKER_PATH): marker},
+        )
+        result = self.change(api, hosted_at("Maxi/Old"), hosted_at("Maxi/New"), login="Maxi")
+        self.assertEqual(result.state, ownership.UNVERIFIED)
+        self.assertIn("renamed into", result.reason)
+        self.assertIn("a fork inherits its files", result.reason)
+
+    def test_moving_a_listing_to_a_fork_verifies_against_both(self):
+        # The listing keeps its id, so the account moving it has to control the original too.
+        api = FakeApi(
+            {
+                "Original/Mod": repository("Original/Mod", owner_id=99),
+                "Maxi/Mod": repository("Maxi/Mod", owner_id=7, fork=True),
+            },
+            topics={"Original/Mod": ["ksa-index-maxi"]},
+        )
+        result = self.change(api, hosted_at("Original/Mod"), hosted_at("Maxi/Mod"), login="Maxi")
+        self.assertEqual(result.state, ownership.VERIFIED)
+        self.assertEqual(result.proof, "topic, then owner id")
+
+    def test_owning_the_fork_is_not_enough_to_take_a_listing(self):
+        api = FakeApi(
+            {
+                "Original/Mod": repository("Original/Mod", owner_id=99),
+                "Maxi/Mod": repository("Maxi/Mod", owner_id=7, fork=True),
+            }
+        )
+        result = self.change(api, hosted_at("Original/Mod"), hosted_at("Maxi/Mod"), login="Maxi")
+        self.assertEqual(result.state, ownership.UNVERIFIED)
+        self.assertIn("already names", result.reason)
+        self.assertNotIn("Maxi/Mod", api.asked)
+
+    def test_moving_to_a_fork_with_only_a_marker_file_is_refused(self):
+        marker = 'id = "AutoStage"\nlogin = "Maxi"\n'
+        api = FakeApi(
+            {
+                "Original/Mod": repository("Original/Mod", owner_id=7),
+                "Maxi/Mod": repository("Maxi/Mod", owner_id=99, fork=True),
+            },
+            files={("Maxi/Mod", ownership.MARKER_PATH): marker},
+        )
+        result = self.change(api, hosted_at("Original/Mod"), hosted_at("Maxi/Mod"), login="Maxi")
+        self.assertEqual(result.state, ownership.UNVERIFIED)
+        self.assertIn("moves to", result.reason)
+        self.assertIn("a fork inherits its files", result.reason)
 
     def test_a_spacedock_host_is_never_a_rename(self):
         # "4254" answers, so only the base_kind guard can fail the second one.
