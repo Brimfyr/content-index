@@ -277,6 +277,25 @@ class Api:
         except (ValueError, UnicodeDecodeError):
             return None
 
+    def folder(self, path, ref):
+        """The (name, type) entries of a folder of this repository on `ref`.
+
+        A folder that is not there has none. The contents API lists at most
+        1000 entries, so a longer listing is Unavailable, never cut short.
+        """
+        answer = self._other(f"/repos/{self.repository}/contents/{path}", ref=ref)
+        if answer is None:
+            return []
+        if not isinstance(answer, list):
+            raise ownership.Unavailable(f"{path} on {ref} is not a folder")
+        if len(answer) >= 1000:
+            raise ownership.Unavailable(f"{path} on {ref} has too many entries to list")
+        return [
+            (entry.get("name") or "", entry.get("type") or "")
+            for entry in answer
+            if isinstance(entry, dict)
+        ]
+
     def spacedock_mod(self, mod_id):
         """SpaceDock's info about a mod, as it gives it."""
         url = f"{SPACEDOCK_API}/mod/{urllib.parse.quote(str(mod_id), safe='')}"

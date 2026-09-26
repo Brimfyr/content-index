@@ -833,6 +833,40 @@ class SpaceDockApi(unittest.TestCase):
                 self.fetch(answer=Answer(body))
 
 
+class FolderApi(unittest.TestCase):
+    """How `Api.folder` lists a folder of the index on a branch."""
+
+    def fetch(self, answer=None, error=None):
+        opener = mock.Mock(side_effect=error) if error else mock.Mock(return_value=answer)
+        api = decide.Api("KSAModding/content-index", "app", public_token="workflow")
+        with mock.patch.object(decide.urllib.request, "urlopen", opener):
+            result = api.folder("packs", "main")
+        return result, opener
+
+    def test_the_entries_come_back_as_names_and_types(self):
+        body = json.dumps([{"name": "Starter", "type": "dir"}, {"name": "README.md", "type": "file"}])
+        entries, opener = self.fetch(answer=Answer(body.encode()))
+        self.assertEqual(entries, [("Starter", "dir"), ("README.md", "file")])
+        request = opener.call_args.args[0]
+        self.assertEqual(
+            request.full_url,
+            "https://api.github.com/repos/KSAModding/content-index/contents/packs?ref=main",
+        )
+
+    def test_a_folder_that_is_not_there_has_no_entries(self):
+        entries, _ = self.fetch(error=http_error(404))
+        self.assertEqual(entries, [])
+
+    def test_a_listing_the_api_may_cut_short_is_unavailable(self):
+        body = json.dumps([{"name": f"p{n}", "type": "dir"} for n in range(1000)])
+        with self.assertRaises(ownership.Unavailable):
+            self.fetch(answer=Answer(body.encode()))
+
+    def test_a_file_is_not_a_folder(self):
+        with self.assertRaises(ownership.Unavailable):
+            self.fetch(answer=Answer(b'{"name": "packs", "type": "file"}'))
+
+
 class AutoMerge(unittest.TestCase):
     def test_a_clean_answer_is_armed(self):
         api = RecordingApi()
