@@ -1,7 +1,7 @@
 import { createChecker, ERROR, NOTE, ABSTRACT_LIMIT } from "./rules.js";
 import { parseDocument, writeDocument } from "./toml.js";
 import { indexFacts, gameVersionChoices, SNAPSHOT_URL } from "./snapshot.js";
-import { emptyForm, emptyRecord, formFromDocument, documentFromForm, isFixedLink, sectionsOf, releaseTime, KINDS, PLATFORMS } from "./model.js";
+import { emptyForm, emptyRecord, formFromDocument, documentFromForm, isFixedLink, sectionsOf, nounOf, releaseTime, KINDS, PLATFORMS } from "./model.js";
 import { measure, readCapped, LIMITS, MEASURE_FACTOR, ICON, DESCRIPTION } from "./images.js";
 import { renderPreview } from "./markdown.js";
 import { zipNames, inspectArchive, StampError } from "./archive.js";
@@ -313,6 +313,8 @@ function renderTypeSections() {
   $("members-section").hidden = !shown.members;
   $("listing-steps").hidden = shown.pack;
   $("pack-steps").hidden = !shown.pack;
+  for (const word of document.querySelectorAll(".noun")) word.textContent = nounOf(state.form.type);
+  for (const part of document.querySelectorAll(".not-pack")) part.hidden = shown.pack;
   // The topic note of a prefill is about a release host, which a pack does not have.
   $("organization-note").hidden = shown.pack || !$("organization-note").textContent;
 }
@@ -597,7 +599,7 @@ function imageEditor(record, role, place, title, onRemove) {
     fetchMessages,
     element("div", { className: "measure" }, [preview, facts]),
     element("div", { className: "row" }, [
-      inputField("License of the image (optional)", record.license, (value) => { record.license = value; }, { placeholder: "the mod's license", "data-field": `${place}.license` }),
+      inputField("License of the image (optional)", record.license, (value) => { record.license = value; }, { placeholder: "the license of the listing", "data-field": `${place}.license` }),
       inputField("Credit (optional)", record.attribution, (value) => { record.attribution = value; }, { "data-field": `${place}.attribution` }),
     ]),
     inputField("Address of the original work (optional)", record.source, (value) => { record.source = value; }, { type: "url", "data-field": `${place}.source` }),

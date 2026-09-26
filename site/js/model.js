@@ -78,6 +78,11 @@ export function sectionsOf(type) {
   };
 }
 
+// The word the page uses for what is listed, so a text visible for every type fits the chosen one.
+export function nounOf(type) {
+  return type === "modpack" ? "pack" : type === "mod-loader" ? "mod loader" : "mod";
+}
+
 export function releaseTime(date = new Date()) {
   return date.toISOString().replace(/\.[0-9]+Z$/, "Z");
 }

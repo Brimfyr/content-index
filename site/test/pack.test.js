@@ -4,7 +4,7 @@ import fs from "node:fs";
 import { createChecker, ERROR, NOTE } from "../js/rules.js";
 import { indexFacts } from "../js/snapshot.js";
 import { parseDocument, writeDocument } from "../js/toml.js";
-import { emptyForm, formFromDocument, documentFromForm, sectionsOf, releaseTime } from "../js/model.js";
+import { emptyForm, formFromDocument, documentFromForm, sectionsOf, nounOf, releaseTime } from "../js/model.js";
 import { memberChoices, versionChoices, defaultVersion, pinNotes, gameMinNotes } from "../js/pack.js";
 import { pullRequestLink, copyAndOpen, documentPath, URL_LIMIT, PASTE_NEW } from "../js/github.js";
 
@@ -161,6 +161,12 @@ test("a pack shows the pack sections and hides releases, loader, dependencies an
   assert.deepEqual(sectionsOf("modpack"), { releases: false, loader: false, launch: false, dependencies: false, pack: true, members: true });
   assert.deepEqual(sectionsOf("mod"), { releases: true, loader: true, launch: false, dependencies: true, pack: false, members: false });
   assert.deepEqual(sectionsOf("mod-loader"), { releases: true, loader: false, launch: true, dependencies: true, pack: false, members: false });
+});
+
+test("the page calls what is listed a mod, a mod loader or a pack", () => {
+  assert.equal(nounOf("mod"), "mod");
+  assert.equal(nounOf("mod-loader"), "mod loader");
+  assert.equal(nounOf("modpack"), "pack");
 });
 
 test("the release time is UTC to the second", () => {
