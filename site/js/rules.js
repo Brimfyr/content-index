@@ -453,6 +453,20 @@ export function curatedTags(tagsText) {
   return entries.filter((entry) => isObject(entry) && typeof entry.tag === "string");
 }
 
+export function normalizeTag(entry) {
+  return entry.toLowerCase().replace(/[\s_]+/gu, "-").replace(/^-+|-+$/gu, "");
+}
+
+export function addTag(tags, entry, pattern) {
+  const typed = entry.trim();
+  if (!typed) return { tags, error: null };
+  const tag = normalizeTag(typed);
+  if (!pattern.test(tag)) {
+    return { tags, error: `'${typed}' cannot be a tag. A tag is lowercase letters and digits in words joined by -, such as space-station.` };
+  }
+  return { tags: tags.includes(tag) ? tags : [...tags, tag], error: null };
+}
+
 export function tagNotes(document, curated) {
   if (!TAG_VOCABULARY[document.type]) return [];
   const known = new Set(curated);
@@ -654,6 +668,7 @@ export function createChecker({ schema, tagsText }) {
     vocabulary,
     curated,
     threadPattern: pattern,
+    tagPattern: new RegExp(schema.$defs.tag.pattern, "u"),
     maxDescriptionImages: schema.properties.images.properties.description.maxItems,
     offline(document) {
       return [

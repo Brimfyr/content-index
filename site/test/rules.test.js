@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { createChecker, licenseErrors, semverCompare, releaseListRules, ERROR, NOTE } from "../js/rules.js";
+import { createChecker, addTag, licenseErrors, semverCompare, releaseListRules, ERROR, NOTE } from "../js/rules.js";
 import { indexFacts, newestStable, gameVersionChoices } from "../js/snapshot.js";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
@@ -175,4 +175,37 @@ test("a schema message is placed at the field it names", () => {
   const missing = found.find((entry) => entry.text === "'forums' is a required property");
   assert.equal(missing.path, "links");
   assert.equal(missing.field, "links.forums");
+});
+
+function addAll(entries, tags = []) {
+  for (const entry of entries) {
+    const added = addTag(tags, entry, checker.tagPattern);
+    assert.equal(added.error, null, entry);
+    tags = added.tags;
+  }
+  return tags;
+}
+
+test("a typed tag is stored in its lowercase form", () => {
+  assert.deepEqual(addAll(["Physics", "Space Station", "  RCS "]), ["physics", "space-station", "rcs"]);
+  assert.deepEqual(addAll(["-Big_ _Engines-", "x2-engine"]), ["big-engines", "x2-engine"]);
+});
+
+test("a typed curated tag in another case selects the curated tag", () => {
+  const tags = addAll(["Gameplay"]);
+  assert.deepEqual(tags, ["gameplay"]);
+  assert.ok(tags.every((tag) => checker.curated.includes(tag)));
+});
+
+test("a typed tag that is already there is not added twice", () => {
+  assert.deepEqual(addAll(["Physics"], ["physics"]), ["physics"]);
+  assert.deepEqual(addAll(["", "   "], ["physics"]), ["physics"]);
+});
+
+test("an entry that cannot become a tag is refused with its name", () => {
+  for (const entry of ["C++", "Space - Station", "---"]) {
+    const added = addTag(["physics"], ` ${entry} `, checker.tagPattern);
+    assert.deepEqual(added.tags, ["physics"]);
+    assert.equal(added.error, `'${entry}' cannot be a tag. A tag is lowercase letters and digits in words joined by -, such as space-station.`);
+  }
 });
