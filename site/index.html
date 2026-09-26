@@ -32,14 +32,15 @@
       <label class="tab"><input type="radio" name="mode" value="edit">Change a listed one</label>
     </div>
 
-    <section id="load" class="card" aria-label="Load a listing" hidden>
+    <section id="load" class="card" aria-label="Load a listing or a pack" hidden>
       <div class="field">
-        <label for="load-id">Id of the listing</label>
+        <label for="load-id">Id of the listing or pack</label>
         <div class="row">
-          <input id="load-id" list="listed-ids" autocomplete="off" spellcheck="false" aria-describedby="msg-load">
+          <input id="load-id" list="listed-ids" autocomplete="off" spellcheck="false" aria-describedby="hint-load msg-load">
           <button type="button" id="load-button" class="primary beside">Load</button>
         </div>
         <div class="aside">
+          <p id="hint-load" class="hint">A listing opens for a change. A pack opens as its next version, with the version raised and the release time set to now, because a pack version cannot change.</p>
           <div id="msg-load" class="messages" aria-live="polite"></div>
         </div>
       </div>
@@ -196,11 +197,14 @@
 
       <section class="card" aria-labelledby="section-members" id="members-section" hidden>
         <h2 id="section-members">Members</h2>
-        <p class="hint">The listed mods in the pack, each at one release. The page offers the mods of the index and their releases that are not yanked, newest first.</p>
+        <p class="hint">The listed mods in the pack, each at one release. The page offers the mods of the index and their releases that are not yanked, newest first. A note marks a member with a newer release that is at least as stable as its pin. The pin stays until you move it.</p>
         <p id="members-state" class="hint" hidden></p>
         <div id="members"></div>
         <p><button type="button" id="add-member" class="add">Add a member</button></p>
         <div id="msg-mods" class="messages" aria-live="polite"></div>
+        <p><button type="button" id="copy-forum-list" class="secondary" aria-describedby="hint-forum-list msg-forum-list">Copy the member list for your forum thread</button></p>
+        <p id="hint-forum-list" class="hint">The forum rules ask a pack thread to list each mod with its version, authors, license, download and thread. The list has one line per member.</p>
+        <div id="msg-forum-list" class="messages" aria-live="polite"></div>
       </section>
 
       <section class="card" aria-labelledby="section-links">
@@ -445,7 +449,7 @@
         <ol class="next" id="pack-steps" hidden>
           <li>GitHub asks you to sign in, makes a copy of the index in your account (a fork) and opens its editor at the path of the new version. The button copies your file first. A pack is almost always too long for the link, so paste the copy into the empty file.</li>
           <li>The first version of a pack also adds <code>packs/&lt;id&gt;/owner.json</code> with your GitHub login and numeric account id, in the same pull request. <a href="https://github.com/KSAModding/content-index/blob/main/packs/README.md">packs/README.md</a> shows the file.</li>
-          <li>A bot checks the file and comments with its verdict. A steward accepts the first claim of a pack id. This page writes the first version of a new pack. A later version is written by hand, as <a href="https://github.com/KSAModding/content-index/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a> says.</li>
+          <li>A bot checks the file and comments with its verdict. A steward accepts the first claim of a pack id. For a later version, choose "Change a listed one" and load the pack. Only the first version adds <code>owner.json</code>.</li>
         </ol>
         <p id="organization-note" class="note" hidden></p>
         <p class="hint">Your listing stays in this browser until you open the pull request. Details are in <a href="https://github.com/KSAModding/content-index/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>.</p>

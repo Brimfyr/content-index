@@ -5,23 +5,57 @@ import { createChecker, ERROR, NOTE } from "../js/rules.js";
 import { indexFacts } from "../js/snapshot.js";
 import { parseDocument, writeDocument } from "../js/toml.js";
 import { emptyForm, formFromDocument, documentFromForm, sectionsOf, nounOf, releaseTime } from "../js/model.js";
-import { memberChoices, versionChoices, defaultVersion, pinNotes, gameMinNotes } from "../js/pack.js";
-import { pullRequestLink, copyAndOpen, documentPath, URL_LIMIT, PASTE_NEW } from "../js/github.js";
+import {
+  memberChoices, versionChoices, defaultVersion, pinNotes, gameMinNotes, packOf, ownIds, raiseVersion, nextPackForm, freeVersion, newerNotes, nextVersionNotes, forumLines,
+} from "../js/pack.js";
+import { pullRequestLink, copyAndOpen, documentPath, rawPackUrl, URL_LIMIT, PASTE_NEW } from "../js/github.js";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 const checker = createChecker({ schema: JSON.parse(read("../../schemas/authored.schema.json")), tagsText: read("../../tags.toml") });
 const PACKS = new URL("../../packs/", import.meta.url);
 
+const PACK_ID = "beiks-flight-planning-essentials-pack";
+const packText = (version) => read(`../../packs/${PACK_ID}/${version}.toml`);
+
 const snapshot = {
   listings: [
     {
       id: "DeltaVMap",
-      authored: { type: "mod", name: "Delta-V Map" },
+      authored: {
+        type: "mod",
+        name: "Delta-V Map",
+        authors: ["Maxi"],
+        license: "MIT",
+        links: { forums: "https://forums.ahwoo.com/threads/deltavmap.978/" },
+      },
       releases: [
-        { version: "1.3.0", release_status: "stable", yanked: true, game_min: "2026.9.25.5500", game_min_revision: 5500 },
+        {
+          version: "1.3.0",
+          release_status: "stable",
+          yanked: true,
+          game_min: "2026.9.25.5500",
+          game_min_revision: 5500,
+          download: { url: "https://example.com/DeltaVMap-1.3.0.zip" },
+        },
         { version: "1.3.0-beta.1", release_status: "testing", game_min: "2026.9.22.5482", game_min_revision: 5482 },
         { version: "1.2.7", release_status: "stable", game_min: "2026.9.22.5482", game_min_revision: 5482 },
-        { version: "1.2.6", release_status: "stable", game_min: "2026.9.10.5438", game_min_revision: 5438 },
+        {
+          version: "1.2.6",
+          release_status: "stable",
+          game_min: "2026.9.10.5438",
+          game_min_revision: 5438,
+          download: { url: "https://example.com/DeltaVMap-1.2.6.zip" },
+        },
+      ],
+    },
+    {
+      id: "AdvancedFlightComputer",
+      authored: { type: "mod", name: "Advanced Flight Computer" },
+      releases: [
+        { version: "0.8.2-nightly.20260925", release_status: "dev" },
+        { version: "0.8.1", release_status: "testing" },
+        { version: "0.8.0", release_status: "stable" },
+        { version: "0.7.5", release_status: "testing", yanked: true },
       ],
     },
     {
@@ -30,11 +64,18 @@ const snapshot = {
       releases: [{ version: "0.9.13", release_status: "stable", game_min: "2026.9", game_min_revision: 5402 }],
     },
     { id: "Unreleased", authored: { type: "mod" }, releases: [] },
-    { id: "StarMap", authored: { type: "mod-loader" }, releases: [{ version: "0.4.7", release_status: "stable" }] },
+    {
+      id: "StarMap",
+      authored: { type: "mod-loader", name: "StarMap", authors: ["StarMap Team"], license: "MIT" },
+      releases: [{ version: "0.4.7", release_status: "stable", download: { url: "https://example.com/StarMap-0.4.7.zip" } }],
+    },
     { id: "GoneMod", index_status: { state: "delisted" } },
     { id: "HiddenMod", authored: { type: "mod" }, index_status: { state: "delisted" }, releases: [{ version: "1.0.0", release_status: "stable" }] },
   ],
-  packs: [{ id: "OtherPack", versions: [{ authored: { version: "1.0.0" } }] }],
+  packs: [
+    { id: PACK_ID, versions: [{ authored: parseDocument(packText("1.0.1")) }, { authored: parseDocument(packText("1.0.0")) }] },
+    { id: "OtherPack", versions: [{ authored: { version: "1.0.0" } }] },
+  ],
   game_versions: { versions: ["2026.9.10.5438", "2026.9.22.5482"] },
 };
 const index = indexFacts(snapshot, checker.threadPattern);
@@ -78,7 +119,11 @@ test("a pack loaded into the form and written back is unchanged", () => {
 });
 
 test("the picker offers listed mods at releases that are not yanked, newest first", () => {
-  assert.deepEqual(memberChoices(index), [["Compendium", "Compendium"], ["DeltaVMap", "Delta-V Map (DeltaVMap)"]]);
+  assert.deepEqual(memberChoices(index), [
+    ["AdvancedFlightComputer", "Advanced Flight Computer (AdvancedFlightComputer)"],
+    ["Compendium", "Compendium"],
+    ["DeltaVMap", "Delta-V Map (DeltaVMap)"],
+  ]);
   assert.deepEqual(versionChoices(index, "DeltaVMap"), [
     ["1.3.0-beta.1", "1.3.0-beta.1 (testing)"],
     ["1.2.7", "1.2.7 (stable)"],
@@ -171,4 +216,153 @@ test("the page calls what is listed a mod, a mod loader or a pack", () => {
 
 test("the release time is UTC to the second", () => {
   assert.equal(releaseTime(new Date(Date.UTC(2026, 8, 25, 12, 3, 4, 567))), "2026-09-25T12:03:04Z");
+});
+
+const NOW = new Date(Date.UTC(2026, 8, 25, 18, 0, 0));
+const withoutVersionKeys = ({ version, released_at: releasedAt, changelog, ...rest }) => rest;
+const levels = (found, level) => found.filter((entry) => entry.level === level).map((entry) => `${entry.path}: ${entry.text}`);
+
+test("loading the listed pack proposes the next version with the same pins and a new release time", () => {
+  const base = parseDocument(packText("1.0.1"));
+  const pack = packOf(index, PACK_ID.toUpperCase());
+  assert.deepEqual(pack.versions.map((entry) => entry.version), ["1.0.1", "1.0.0"]);
+  const document = documentFromForm(nextPackForm(base, pack, NOW), base);
+  assert.equal(document.version, "1.0.2");
+  assert.equal(document.released_at, "2026-09-25T18:00:00Z");
+  assert.notEqual(document.released_at, base.released_at);
+  assert.deepEqual(document.mods, [
+    { id: "DeltaVMap", version: "1.2.6" },
+    { id: "AdvancedFlightComputer", version: "0.8.0" },
+    { id: "Compendium", version: "0.9.13" },
+  ]);
+  assert.deepEqual(withoutVersionKeys(document), withoutVersionKeys(base));
+  assert.equal(documentPath(document), `packs/${PACK_ID}/1.0.2.toml`);
+  assert.deepEqual(levels(nextVersionNotes(document, index, PACK_ID), ERROR), []);
+});
+
+test("the next version starts with an empty changelog, because the old one describes the old version", () => {
+  const base = { ...parseDocument(packText("1.0.1")), changelog: "Adds Compendium." };
+  const form = nextPackForm(base, packOf(index, PACK_ID), NOW);
+  assert.equal(form.changelog, "");
+  assert.equal(documentFromForm(form, base).changelog, undefined);
+});
+
+test("the pack's own id gives no id error, and another pack's id does", () => {
+  const base = parseDocument(packText("1.0.1"));
+  const document = documentFromForm(nextPackForm(base, packOf(index, PACK_ID), NOW), base);
+  const { own, pack } = ownIds(base);
+  assert.deepEqual([own, pack], [PACK_ID, PACK_ID]);
+  assert.deepEqual(levels(checker.check(document, { index, own }), ERROR), []);
+  assert.deepEqual(levels(nextVersionNotes(document, index, pack), ERROR), []);
+  assert.ok(levels(checker.check(document, { index }), ERROR).some((text) => text.startsWith("id: ") && text.includes("is already held by")));
+  assert.deepEqual(ownIds({ id: "DeltaVMap", type: "mod" }), { own: "DeltaVMap", pack: null });
+  assert.deepEqual(ownIds(null), { own: null, pack: null });
+});
+
+test("a later pack version opens the new file, never the edit page of the loaded one", () => {
+  const base = parseDocument(packText("1.0.1"));
+  const document = documentFromForm(nextPackForm(base, packOf(index, PACK_ID), NOW), base);
+  const text = writeDocument(document);
+  const link = pullRequestLink(documentPath(document, encodeURIComponent), text, base);
+  assert.equal(link.url, `https://github.com/KSAModding/content-index/new/main?filename=packs/${PACK_ID}/1.0.2.toml`);
+  assert.equal(link.step, PASTE_NEW);
+});
+
+test("a pack whose highest version is retracted proposes a version above it and shows the reason", () => {
+  const reason = "Retracted at the request of the author of DeltaVMap.";
+  const newest = { ...parseDocument(packText("1.0.1")), version: "1.1.0", released_at: "2026-09-24T10:00:00Z" };
+  const retracted = indexFacts({
+    ...snapshot,
+    packs: [{
+      id: PACK_ID,
+      versions: [
+        { authored: parseDocument(packText("1.0.0")) },
+        { authored: newest, index_status: { state: "retracted", reason } },
+        { authored: parseDocument(packText("1.0.1")) },
+      ],
+    }],
+  }, checker.threadPattern);
+  const pack = packOf(retracted, PACK_ID);
+  assert.deepEqual(pack.versions.map((entry) => entry.version), ["1.1.0", "1.0.1", "1.0.0"]);
+  const document = documentFromForm(nextPackForm(newest, pack, NOW), newest);
+  assert.equal(document.version, "1.1.1");
+  assert.deepEqual(levels(nextVersionNotes(document, retracted, PACK_ID), NOTE), [
+    `version: version '1.1.0' of this pack is retracted: ${reason}`,
+    `mods[0]: the retraction of version '1.1.0' names 'DeltaVMap': ${reason}`,
+  ]);
+  assert.deepEqual(levels(nextVersionNotes(document, retracted, PACK_ID), ERROR), []);
+  const behind = { ...document, version: "1.0.2", released_at: "2026-09-24T10:00:00Z" };
+  assert.deepEqual(levels(nextVersionNotes(behind, retracted, PACK_ID), ERROR), [
+    "version: '1.0.2' is not higher than '1.1.0', the highest version of this pack, retracted ones included",
+    "released_at: '2026-09-24T10:00:00Z' is not later than '2026-09-24T10:00:00Z', the release time of version '1.1.0'",
+  ]);
+  assert.deepEqual(nextVersionNotes(document, retracted, null), []);
+});
+
+test("a proposed path that exists on raw GitHub is raised again", async () => {
+  const onMain = new Set(["1.0.2", "1.0.3"]);
+  const asked = [];
+  const taken = async (version) => {
+    asked.push(rawPackUrl(PACK_ID, version));
+    return onMain.has(version);
+  };
+  assert.equal(await freeVersion("1.0.2", taken), "1.0.4");
+  assert.deepEqual(asked, ["1.0.2", "1.0.3", "1.0.4"].map((version) =>
+    `https://raw.githubusercontent.com/KSAModding/content-index/main/packs/${PACK_ID}/${version}.toml`));
+  assert.equal(await freeVersion("1.0.5", taken), "1.0.5");
+  assert.equal(await freeVersion("1.0.2", async () => true, 3), null);
+  await assert.rejects(freeVersion("1.0.2", async () => { throw new Error("GitHub did not answer."); }));
+});
+
+test("the version is raised as npm raises a patch", () => {
+  assert.equal(raiseVersion("1.0.1"), "1.0.2");
+  assert.equal(raiseVersion("2.3.9+build.7"), "2.3.10");
+  assert.equal(raiseVersion("1.1.0-rc.1"), "1.1.0");
+  assert.equal(raiseVersion("not a version"), null);
+});
+
+test("a member with a newer release at least as stable is marked, and a newer testing release does not mark a stable pin", () => {
+  const document = {
+    type: "modpack",
+    mods: [
+      { id: "DeltaVMap", version: "1.2.6" },
+      { id: "DeltaVMap", version: "1.2.7" },
+      { id: "AdvancedFlightComputer", version: "0.8.0" },
+      { id: "AdvancedFlightComputer", version: "0.8.1" },
+      { id: "DeltaVMap", version: "1.1.0" },
+      { id: "Compendium", version: "0.9.13" },
+      { id: "NotListed", version: "1.0.0" },
+      { id: "AdvancedFlightComputer", version: "0.7.5" },
+    ],
+  };
+  assert.deepEqual(newerNotes(document, index).map((entry) => [entry.path, entry.newer, entry.level, entry.text]), [
+    ["mods[0]", "1.2.7", NOTE, "'DeltaVMap' has a newer stable release '1.2.7'; the pin stays until you move it"],
+    ["mods[4]", "1.2.7", NOTE, "'DeltaVMap' has a newer stable release '1.2.7'; the pin stays until you move it"],
+    ["mods[7]", "0.8.1", NOTE, "'AdvancedFlightComputer' has a newer testing release '0.8.1'; the pin stays until you move it"],
+  ]);
+  assert.deepEqual(newerNotes({ ...document, type: "mod" }, index), []);
+});
+
+test("the forum list has one line per member in the words Borea writes", () => {
+  const document = {
+    type: "modpack",
+    mods: [
+      { id: "DeltaVMap", version: "1.2.6" },
+      { id: "NotListed", version: "1.0.0" },
+      { id: "deltavmap", version: "1.3.0" },
+      { id: "StarMap", version: "0.4.7" },
+      { id: "HiddenMod", version: "1.0.0" },
+      { id: "DeltaVMap", version: "9.9.9" },
+    ],
+  };
+  const thread = "Thread: https://forums.ahwoo.com/threads/deltavmap.978/";
+  assert.deepEqual(forumLines(document, index), [
+    `Delta-V Map 1.2.6 - Author: Maxi - License: MIT - Download: https://example.com/DeltaVMap-1.2.6.zip - ${thread}`,
+    "NotListed 1.0.0 - Not listed in the content index",
+    `Delta-V Map 1.3.0 - Author: Maxi - License: MIT - Download: https://example.com/DeltaVMap-1.3.0.zip - ${thread}`,
+    "StarMap 0.4.7 - Author: StarMap Team - License: MIT - Download: https://example.com/StarMap-0.4.7.zip - Thread: ",
+    "HiddenMod 1.0.0 - Not listed in the content index",
+    "DeltaVMap 9.9.9 - Not listed in the content index",
+  ]);
+  assert.deepEqual(forumLines({ type: "modpack", mods: [{ id: "DeltaVMap", version: "1.2.6" }, { id: "Compendium" }] }, index).at(-1), null);
 });
