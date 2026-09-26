@@ -16,6 +16,7 @@ const PINNED_SECTIONS = ["mods", "vehicles", "saves"];
 
 const REVISION_BOUND = /^[0-9]{4}\.[0-9]+\.[0-9]+\.([0-9]+)(?![\s\S])/;
 const MONTH_BOUND = /^([0-9]{4})\.([0-9]+)(?![\s\S])/;
+const TIMESTAMP = /^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})/;
 const GAME_VERSION = /^v?(\d+)\.(\d+)\.(\d+)\.(\d+)(?:-[^+]+)?(?:\+.*)?$/;
 const LICENSE_REF = /^(?:DocumentRef-[A-Za-z0-9.-]+:)?LicenseRef-[A-Za-z0-9.-]+(?![\s\S])/;
 const THREAD_ID = "[0-9]+";
@@ -260,6 +261,23 @@ function checkParentheses(expression, found) {
   }
 }
 
+function daysIn(year, month) {
+  if (month === 2) return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28;
+  return [4, 6, 9, 11].includes(month) ? 30 : 31;
+}
+
+// The schema checks the shape of released_at. This checks that the calendar has
+// that day and time, as check_schema.check_timestamp does.
+function checkTimestamp(value, found) {
+  if (typeof value !== "string") return;
+  const parts = TIMESTAMP.exec(value);
+  if (!parts) return;
+  const [year, month, day, hour, minute, second] = parts.slice(1).map(Number);
+  const real = year >= 1 && month >= 1 && month <= 12 && day >= 1 && day <= daysIn(year, month)
+    && hour <= 23 && minute <= 59 && second <= 59;
+  if (!real) found.push(message(ERROR, "released_at", `'${value}' is not a real date and time`));
+}
+
 function checkLinkKeys(links, found) {
   if (!isObject(links)) return;
   const seen = new Map();
@@ -320,6 +338,7 @@ export function documentRules(document) {
   checkLinkKeys(document.links, found);
   if (isObject(document.compatibility)) checkGameBounds(document.compatibility, found);
   checkParentheses(document.license, found);
+  checkTimestamp(document.released_at, found);
   if (typeof document.superseded_by === "string" && fold(document.superseded_by) === own) {
     found.push(message(ERROR, "superseded_by", "a listing cannot supersede itself"));
   }

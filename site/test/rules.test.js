@@ -80,6 +80,30 @@ test("a pin of a pack, of another spelling or of the same mod twice is an error,
   ]);
 });
 
+test("a release time the calendar does not have is an error, as check_schema.check_timestamp says", () => {
+  const verdicts = {
+    "2026-09-31T12:00:00Z": false,
+    "2026-02-29T12:00:00Z": false,
+    "1900-02-29T12:00:00Z": false,
+    "0000-01-01T00:00:00Z": false,
+    "2026-00-01T00:00:00Z": false,
+    "2026-13-01T00:00:00Z": false,
+    "2026-01-00T00:00:00Z": false,
+    "2026-01-01T24:00:00Z": false,
+    "2026-01-01T23:60:00Z": false,
+    "2026-01-01T23:59:60Z": false,
+    "2024-02-29T12:00:00Z": true,
+    "2000-02-29T12:00:00Z": true,
+    "0001-01-01T00:00:00Z": true,
+    "2026-12-31T23:59:59.1234567891Z": true,
+  };
+  for (const [value, real] of Object.entries(verdicts)) {
+    const pack = mod({ type: "modpack", version: "1.0.0", released_at: value, mods: [{ id: "OtherMod", version: "1.0.0" }] });
+    const errors = texts(checker.check(pack, { index }), ERROR);
+    assert.deepEqual(errors, real ? [] : [`released_at: '${value}' is not a real date and time`], value);
+  }
+});
+
 test("a forums thread another listing names gives a note, by thread id", () => {
   const found = texts(checker.check(mod({ links: { forums: "https://forums.ahwoo.com/index.php?threads/other.500/" } }), { index }), NOTE);
   assert.deepEqual(found, [

@@ -889,6 +889,21 @@
       "noted": false,
       "says": "a pack cannot pin itself",
       "toml": "spec_version = 1\nid = \"ExamplePack\"\ntype = \"modpack\"\nname = \"Example Pack\"\nauthors = [\"Example Author\"]\nabstract = \"Two mods for mission planning.\"\nlicense = \"MIT\"\ntags = [\"user-interface\"]\nversion = \"1.0.0\"\nreleased_at = \"2026-09-25T12:00:00Z\"\n\n[links]\nforums = \"https://forums.ahwoo.com/threads/example-pack.1/\"\n\n[compatibility]\ngame_min = \"2026.9.22.5482\"\n\n[[mods]]\nid = \"examplepack\"\nversion = \"1.0.0\"\n"
+    },
+    {
+      "name": "a pack release time names a day the calendar has not",
+      "rule": "schema",
+      "accepted": false,
+      "noted": false,
+      "says": "is not a real date and time",
+      "toml": "spec_version = 1\nid = \"ExamplePack\"\ntype = \"modpack\"\nname = \"Example Pack\"\nauthors = [\"Example Author\"]\nabstract = \"Two mods for mission planning.\"\nlicense = \"MIT\"\ntags = [\"user-interface\"]\nversion = \"1.0.0\"\nreleased_at = \"2026-09-31T12:00:00Z\"\n\n[links]\nforums = \"https://forums.ahwoo.com/threads/example-pack.1/\"\n\n[compatibility]\ngame_min = \"2026.9.22.5482\"\n\n[[mods]]\nid = \"DeltaVMap\"\nversion = \"1.0.0\"\n"
+    },
+    {
+      "name": "a pack release time may fall on a leap day",
+      "rule": "schema",
+      "accepted": true,
+      "noted": false,
+      "toml": "spec_version = 1\nid = \"ExamplePack\"\ntype = \"modpack\"\nname = \"Example Pack\"\nauthors = [\"Example Author\"]\nabstract = \"Two mods for mission planning.\"\nlicense = \"MIT\"\ntags = [\"user-interface\"]\nversion = \"1.0.0\"\nreleased_at = \"2028-02-29T23:59:59.5Z\"\n\n[links]\nforums = \"https://forums.ahwoo.com/threads/example-pack.1/\"\n\n[compatibility]\ngame_min = \"2026.9.22.5482\"\n\n[[mods]]\nid = \"DeltaVMap\"\nversion = \"1.0.0\"\n"
     }
   ]
 }
