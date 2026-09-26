@@ -36,3 +36,8 @@ test("every label, hint and message container belongs to a field of the markup",
     }
   }
 });
+
+test("the type is chosen before the releases and the id", () => {
+  const type = html.indexOf('id="type"');
+  assert.ok(type > 0 && type < html.indexOf('id="releases-section"') && type < html.indexOf('id="id"'));
+});

@@ -47,6 +47,22 @@
     <p id="editing" class="editing" hidden></p>
 
     <form id="form" novalidate>
+      <section class="card" aria-labelledby="section-kind">
+        <h2 id="section-kind">What you list</h2>
+        <div class="field">
+          <label for="type">Type</label>
+          <select id="type" name="type" aria-describedby="hint-type msg-type">
+            <option value="mod">mod</option>
+            <option value="mod-loader">mod-loader</option>
+            <option value="modpack">modpack</option>
+          </select>
+          <div class="aside">
+            <p id="hint-type" class="hint">A mod-loader loads other mods. A modpack is a set of listed mods, each at one release, and every version of it is a file of its own. Everything else is a mod.</p>
+            <div id="msg-type" class="messages" aria-live="polite"></div>
+          </div>
+        </div>
+      </section>
+
       <section class="card" aria-labelledby="section-releases" id="releases-section" data-empty="Recommended">
         <h2 id="section-releases">Releases</h2>
         <p class="hint">Where the index picks up each new release of your mod. It follows the host by itself, and you have to control that host, which the last section explains.</p>
@@ -100,18 +116,6 @@
           <div class="aside">
             <p id="hint-id" class="hint">The folder name your mod installs as, which the game sees, or the name of your pack in the index. 1 to 64 letters, digits, <code>.</code>, <code>_</code> and <code>-</code>, starting and ending with a letter or digit. It cannot change later.</p>
             <div id="msg-id" class="messages" aria-live="polite"></div>
-          </div>
-        </div>
-        <div class="field">
-          <label for="type">Type</label>
-          <select id="type" name="type" aria-describedby="hint-type msg-type">
-            <option value="mod">mod</option>
-            <option value="mod-loader">mod-loader</option>
-            <option value="modpack">modpack</option>
-          </select>
-          <div class="aside">
-            <p id="hint-type" class="hint">A mod-loader loads other mods. A modpack is a set of listed mods, each at one release, and every version of it is a file of its own. Everything else is a mod.</p>
-            <div id="msg-type" class="messages" aria-live="polite"></div>
           </div>
         </div>
         <div class="field">
