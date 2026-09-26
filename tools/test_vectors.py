@@ -13,12 +13,14 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 import check_images
 import check_index
+import check_layout
 import check_license
 import check_schema
 import check_tags
 import page_licenses
 
 VECTORS = Path(__file__).resolve().parent.parent / "schemas" / "vectors.json"
+SITE_FIXTURES = Path(__file__).resolve().parent.parent / "site" / "test" / "fixtures"
 RULES = {"schema", "id", "bounds", "license", "tags", "images", "abstract"}
 WHERE = "vector"
 
@@ -68,6 +70,20 @@ class Vectors(unittest.TestCase):
                 self.assertEqual(bool(notes), vector["noted"], notes)
                 if "says" in vector:
                     self.assertTrue(any(vector["says"] in line for line in errors + notes), errors + notes)
+
+
+class PagePack(unittest.TestCase):
+    """site/test/pack.test.js writes this file from a pack form."""
+
+    def test_the_checks_accept_the_pack_the_page_writes(self):
+        packs = SITE_FIXTURES / "packs"
+        self.assertEqual(check_layout.check(SITE_FIXTURES / "listings", packs), [])
+        self.assertEqual(check_layout.counted(SITE_FIXTURES / "listings", packs), 1)
+        path = packs / "ExamplePack" / "1.0.0.toml"
+        document = check_schema.normalise(tomllib.loads(path.read_text(encoding="utf-8")))
+        errors = []
+        check_schema.check_parsed(WHERE, document, check_schema.validator(), errors)
+        self.assertEqual(errors, [])
 
 
 class PageLicenses(unittest.TestCase):

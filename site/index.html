@@ -20,7 +20,7 @@
     <header class="intro">
       <div>
         <h1>List your mod</h1>
-        <p>Write a listing for the KSA content index, or change one that is listed. The page checks the file with the rules of the index while you type.</p>
+        <p>Write a listing or a mod pack version for the KSA content index, or change a listing. The page checks the file with the rules of the index while you type.</p>
       </div>
       <button type="button" id="reset" class="secondary">Start over</button>
     </header>
@@ -47,7 +47,7 @@
     <p id="editing" class="editing" hidden></p>
 
     <form id="form" novalidate>
-      <section class="card" aria-labelledby="section-releases" data-empty="Recommended">
+      <section class="card" aria-labelledby="section-releases" id="releases-section" data-empty="Recommended">
         <h2 id="section-releases">Releases</h2>
         <p class="hint">Where the index picks up each new release of your mod. It follows the host by itself, and you have to control that host, which the last section explains.</p>
         <div class="field">
@@ -98,7 +98,7 @@
           <label for="id">Id</label>
           <input id="id" name="id" autocomplete="off" spellcheck="false" aria-describedby="hint-id msg-id">
           <div class="aside">
-            <p id="hint-id" class="hint">The folder name your mod installs as, which the game sees. 1 to 64 letters, digits, <code>.</code>, <code>_</code> and <code>-</code>, starting and ending with a letter or digit. It cannot change later.</p>
+            <p id="hint-id" class="hint">The folder name your mod installs as, which the game sees, or the name of your pack in the index. 1 to 64 letters, digits, <code>.</code>, <code>_</code> and <code>-</code>, starting and ending with a letter or digit. It cannot change later.</p>
             <div id="msg-id" class="messages" aria-live="polite"></div>
           </div>
         </div>
@@ -107,9 +107,10 @@
           <select id="type" name="type" aria-describedby="hint-type msg-type">
             <option value="mod">mod</option>
             <option value="mod-loader">mod-loader</option>
+            <option value="modpack">modpack</option>
           </select>
           <div class="aside">
-            <p id="hint-type" class="hint">A mod-loader loads other mods. Everything else is a mod.</p>
+            <p id="hint-type" class="hint">A mod-loader loads other mods. A modpack is a set of listed mods, each at one release, and every version of it is a file of its own. Everything else is a mod.</p>
             <div id="msg-type" class="messages" aria-live="polite"></div>
           </div>
         </div>
@@ -155,6 +156,47 @@
             <div id="msg-license" class="messages" aria-live="polite"></div>
           </div>
         </div>
+      </section>
+
+      <section class="card" aria-labelledby="section-pack" id="pack-section" hidden>
+        <h2 id="section-pack">Pack</h2>
+        <p class="hint">A pack version goes at <code>packs/&lt;id&gt;/&lt;version&gt;.toml</code> and cannot change after it is merged. A change is a new version.</p>
+        <div class="field">
+          <label for="version">Pack version</label>
+          <input id="version" name="version" autocomplete="off" spellcheck="false" placeholder="1.0.0" aria-describedby="hint-version msg-version">
+          <div class="aside">
+            <p id="hint-version" class="hint">A SemVer version, such as <code>1.0.0</code>. It is also the name of the file.</p>
+            <div id="msg-version" class="messages" aria-live="polite"></div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="released-at">Release time</label>
+          <div class="row">
+            <input id="released-at" name="released_at" autocomplete="off" spellcheck="false" placeholder="2026-09-25T12:00:00Z" aria-describedby="hint-released-at msg-released_at">
+            <button type="button" id="released-now" class="beside">Now</button>
+          </div>
+          <div class="aside">
+            <p id="hint-released-at" class="hint">When this version is published, in UTC, such as <code>2026-09-25T12:00:00Z</code>.</p>
+            <div id="msg-released_at" class="messages" aria-live="polite"></div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="changelog">Changelog (optional)</label>
+          <textarea id="changelog" name="changelog" rows="3" aria-describedby="hint-changelog msg-changelog"></textarea>
+          <div class="aside">
+            <p id="hint-changelog" class="hint">What changed in this version, or the address of a page that says it.</p>
+            <div id="msg-changelog" class="messages" aria-live="polite"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="section-members" id="members-section" hidden>
+        <h2 id="section-members">Members</h2>
+        <p class="hint">The listed mods in the pack, each at one release. The page offers the mods of the index and their releases that are not yanked, newest first.</p>
+        <p id="members-state" class="hint" hidden></p>
+        <div id="members"></div>
+        <p><button type="button" id="add-member" class="add">Add a member</button></p>
+        <div id="msg-mods" class="messages" aria-live="polite"></div>
       </section>
 
       <section class="card" aria-labelledby="section-links">
@@ -328,7 +370,7 @@
         <div id="msg-provides" class="messages" aria-live="polite"></div>
       </section>
 
-      <section class="card" aria-labelledby="section-dependencies">
+      <section class="card" aria-labelledby="section-dependencies" id="dependencies-section">
         <h2 id="section-dependencies">Dependencies</h2>
         <p class="hint">Other listed mods yours works with. Code dependencies come from the <code>mod.toml</code> in your release by themselves, so add here only bounds or kinds the release cannot say.</p>
         <div id="dependencies"></div>
@@ -383,7 +425,7 @@
 
       <section class="card" aria-labelledby="section-pr" data-nav="off">
         <h2 id="section-pr">How the pull request is checked</h2>
-        <ol class="next">
+        <ol class="next" id="listing-steps">
           <li>GitHub asks you to sign in, makes a copy of the index in your account (a fork) and opens its editor. The button copies your file first. GitHub fills in a short new file. For a long one, paste the copy into the empty file. For a change, replace the whole old file with the copy. Several listings can go into one pull request, and it merges by itself once ownership verifies for each of them.</li>
           <li>A bot checks the file, downloads your latest release and fetches your images, then comments with its verdict.</li>
           <li>It verifies that your GitHub account controls the release host, by one of these:
@@ -395,6 +437,11 @@
             A SpaceDock mod proves it through the source code link on its SpaceDock page.
           </li>
           <li>When everything is green, the pull request merges by itself. Otherwise a steward looks at it.</li>
+        </ol>
+        <ol class="next" id="pack-steps" hidden>
+          <li>GitHub asks you to sign in, makes a copy of the index in your account (a fork) and opens its editor at the path of the new version. The button copies your file first. A pack is almost always too long for the link, so paste the copy into the empty file.</li>
+          <li>The first version of a pack also adds <code>packs/&lt;id&gt;/owner.json</code> with your GitHub login and numeric account id, in the same pull request. <a href="https://github.com/KSAModding/content-index/blob/main/packs/README.md">packs/README.md</a> shows the file.</li>
+          <li>A bot checks the file and comments with its verdict. A steward accepts the first claim of a pack id. This page writes the first version of a new pack. A later version is written by hand, as <a href="https://github.com/KSAModding/content-index/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a> says.</li>
         </ol>
         <p id="organization-note" class="note" hidden></p>
         <p class="hint">Your listing stays in this browser until you open the pull request. Details are in <a href="https://github.com/KSAModding/content-index/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>.</p>

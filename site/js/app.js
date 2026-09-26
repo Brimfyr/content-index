@@ -1,16 +1,18 @@
 import { createChecker, ERROR, NOTE, ABSTRACT_LIMIT } from "./rules.js";
 import { parseDocument, writeDocument } from "./toml.js";
 import { indexFacts, gameVersionChoices, SNAPSHOT_URL } from "./snapshot.js";
-import { emptyForm, emptyRecord, formFromDocument, documentFromForm, isFixedLink, KINDS, PLATFORMS } from "./model.js";
+import { emptyForm, emptyRecord, formFromDocument, documentFromForm, isFixedLink, sectionsOf, releaseTime, KINDS, PLATFORMS } from "./model.js";
 import { measure, readCapped, LIMITS, MEASURE_FACTOR, ICON, DESCRIPTION } from "./images.js";
 import { renderPreview } from "./markdown.js";
 import { zipNames, inspectArchive, StampError } from "./archive.js";
-import { pullRequestLink, copyAndOpen, rawListingUrl, repositoryApiUrl, prefillFromRepository, listingPath } from "./github.js";
+import { pullRequestLink, copyAndOpen, rawListingUrl, repositoryApiUrl, prefillFromRepository, listingPath, documentPath } from "./github.js";
+import { memberChoices, versionChoices, defaultVersion, pinNotes, gameMinNotes } from "./pack.js";
 
 const STORAGE_KEY = "ksa-listing-page/v1";
 const TIMEOUT = 20000;
 const SECTION_INPUTS = { links: "link-forums", compatibility: "game-min" };
 const MANUAL = new Set(["msg-load", "msg-prefill", "msg-output", "msg-pr", "archive-result"]);
+const ROW_MESSAGES = ["link", "dependency", "member"];
 
 const $ = (id) => document.getElementById(id);
 
@@ -113,6 +115,9 @@ const FIELDS = {
   launch: ["launch"],
   "content-dir": ["contentDir"],
   "content-path": ["contentPath"],
+  version: ["version"],
+  "released-at": ["releasedAt"],
+  changelog: ["changelog"],
 };
 
 function readPath(path) {
@@ -170,6 +175,18 @@ function bindStatic() {
     renderDependencies();
     refresh();
     $("dependencies").lastElementChild.querySelector("input").focus();
+  });
+  $("add-member").addEventListener("click", () => {
+    state.form.members.push({ id: "", version: "" });
+    renderMembers();
+    refresh();
+    $("members").lastElementChild.querySelector("select").focus();
+  });
+  $("released-now").addEventListener("click", () => {
+    state.form.releasedAt = releaseTime();
+    touched.add($("released-at"));
+    renderFields();
+    refresh();
   });
   $("add-tag").addEventListener("click", addFreeTag);
   $("tag-input").addEventListener("keydown", (event) => {
@@ -240,6 +257,8 @@ function renderMode() {
   for (const radio of document.querySelectorAll("input[name=mode]")) radio.checked = radio.value === state.mode;
   $("load").hidden = !editing;
   $("id").readOnly = editing && Boolean(state.base);
+  // A listing cannot become a pack, which lives at a path of its own.
+  $("type").querySelector("option[value=modpack]").disabled = editing && Boolean(state.base);
   $("editing").hidden = !(editing && state.base);
   $("editing").textContent = editing && state.base ? `Changing ${listingPath(state.form.id)}. The id cannot change.` : "";
 }
@@ -285,9 +304,17 @@ function renderLoader() {
 }
 
 function renderTypeSections() {
-  const loader = state.form.type === "mod-loader";
-  $("loader-block").hidden = loader;
-  $("launch-section").hidden = !loader;
+  const shown = sectionsOf(state.form.type);
+  $("releases-section").hidden = !shown.releases;
+  $("loader-block").hidden = !shown.loader;
+  $("launch-section").hidden = !shown.launch;
+  $("dependencies-section").hidden = !shown.dependencies;
+  $("pack-section").hidden = !shown.pack;
+  $("members-section").hidden = !shown.members;
+  $("listing-steps").hidden = shown.pack;
+  $("pack-steps").hidden = !shown.pack;
+  // The topic note of a prefill is about a release host, which a pack does not have.
+  $("organization-note").hidden = shown.pack || !$("organization-note").textContent;
 }
 
 function inputField(label, value, onInput, attributes = {}, action = null) {
@@ -302,15 +329,21 @@ function inputField(label, value, onInput, attributes = {}, action = null) {
   return element("div", { className: "field grow" }, [element("label", { for: id, text: label }), control]);
 }
 
-function selectField(label, value, options, onChange) {
+function selectField(label, value, options, onChange, action = null) {
   const id = `f${Math.random().toString(36).slice(2)}`;
-  const select = element("select", { id }, options.map(([optionValue, text]) => element("option", { value: optionValue, text })));
-  select.value = value;
+  const select = element("select", { id });
+  fillSelect(select, options, value);
   select.addEventListener("change", () => {
     onChange(select.value);
     refresh();
   });
-  return element("div", { className: "field grow" }, [element("label", { for: id, text: label }), select]);
+  const control = action ? element("div", { className: "postfix" }, [select, action]) : select;
+  return element("div", { className: "field grow" }, [element("label", { for: id, text: label }), control]);
+}
+
+function fillSelect(select, options, value) {
+  select.replaceChildren(...options.map(([optionValue, text]) => element("option", { value: optionValue, text })));
+  select.value = value;
 }
 
 function removeButton(label, onClick) {
@@ -377,6 +410,38 @@ function renderDependencies() {
       ]),
       messages,
     ]);
+  }));
+}
+
+function renderMembers() {
+  $("add-member").disabled = !index;
+  $("members-state").hidden = Boolean(index);
+  $("members-state").textContent = snapshotState === "loading"
+    ? "The members come from the index snapshot, which is still loading."
+    : "The index snapshot did not load, so the page cannot offer members. Reload the page to try again.";
+  $("members").replaceChildren(...state.form.members.map((entry, number) => {
+    const remove = removeButton("Remove this member", () => {
+      state.form.members.splice(number, 1);
+      renderMembers();
+      refresh();
+    });
+    const messages = element("div", { className: "messages", "aria-live": "polite", "data-member": number });
+    if (entry.kept !== undefined) {
+      return element("div", { className: "item" }, [
+        element("div", { className: "item-head" }, [element("p", { className: "hint", text: "A pin the page cannot show, kept as it is." }), remove]),
+        messages,
+      ]);
+    }
+    const releases = () => [["", "Choose a release"], ...versionChoices(index, entry.id, entry.version)];
+    const version = selectField("Release", entry.version, releases(), (value) => {
+      entry.version = value;
+    }, remove);
+    const mod = selectField("Mod", entry.id, [["", "Choose a mod"], ...memberChoices(index, entry.id)], (value) => {
+      entry.id = value;
+      entry.version = defaultVersion(index, value);
+      fillSelect(version.querySelector("select"), releases(), entry.version);
+    });
+    return element("div", { className: "item" }, [element("div", { className: "row" }, [mod, version]), messages]);
   }));
 }
 
@@ -628,8 +693,13 @@ function place(entry) {
     }
     const dependency = /^dependencies\[(\d+)\]$/.exec(path);
     if (dependency) {
-      const number = dependencyRows()[Number(dependency[1])];
+      const number = filledRows(state.form.dependencies)[Number(dependency[1])];
       if (number !== undefined) return $("dependencies").querySelector(`[data-dependency="${number}"]`);
+    }
+    const member = /^mods\[(\d+)\]$/.exec(path);
+    if (member) {
+      const number = filledRows(state.form.members)[Number(member[1])];
+      if (number !== undefined) return $("members").querySelector(`[data-member="${number}"]`);
     }
     const target = $(`msg-${path}`);
     if (target) return target;
@@ -637,9 +707,10 @@ function place(entry) {
   return null;
 }
 
-function dependencyRows() {
+// The written document leaves out a row without an id, so its index differs from the form's.
+function filledRows(entries) {
   const rows = [];
-  state.form.dependencies.forEach((entry, number) => {
+  entries.forEach((entry, number) => {
     if (entry.kept !== undefined || entry.id.trim()) rows.push(number);
   });
   return rows;
@@ -659,7 +730,7 @@ function extraMessages() {
     const facts = measured.get(record);
     for (const problem of facts ? facts.problems : []) found.push({ level: ERROR, path: where, text: problem });
   }
-  if (archiveNames) {
+  if (archiveNames && current.document.type !== "modpack") {
     for (const problem of inspectArchive(archiveNames, current.document).problems) {
       found.push({ level: ERROR, path: "archive", text: problem });
     }
@@ -669,7 +740,7 @@ function extraMessages() {
 
 function renderMessages() {
   for (const container of document.querySelectorAll(".messages")) {
-    const checked = container.id ? !MANUAL.has(container.id) : container.dataset.link !== undefined || container.dataset.dependency !== undefined;
+    const checked = container.id ? !MANUAL.has(container.id) : ROW_MESSAGES.some((name) => container.dataset[name] !== undefined);
     if (checked) container.replaceChildren();
   }
   for (const input of document.querySelectorAll("[aria-invalid]")) input.removeAttribute("aria-invalid");
@@ -692,8 +763,8 @@ function invalidInput(entry, target) {
       .find((node) => node.getAttribute("aria-describedby").split(" ").includes(target.id));
     if (described) return described;
   }
-  if (target.dataset.link !== undefined || target.dataset.dependency !== undefined) {
-    return target.closest(".item").querySelector("input");
+  if (ROW_MESSAGES.some((name) => target.dataset[name] !== undefined)) {
+    return target.closest(".item").querySelector("input, select");
   }
   return null;
 }
@@ -704,6 +775,7 @@ const REQUIRED = /^'([^']+)' is a required property$/;
 const MISSING_NAMES = {
   id: "Id", name: "Name", authors: "Authors", abstract: "Abstract", license: "License",
   links: "Forums thread", forums: "Forums thread", compatibility: "Oldest game version", game_min: "Oldest game version",
+  version: "Pack version", released_at: "Release time", mods: "Members",
 };
 
 function renderSummary() {
@@ -766,7 +838,7 @@ function renderCard() {
   ]);
   const authors = form.authors.split(",").map((name) => name.trim()).filter(Boolean);
   const title = element("p", { className: "card-title" }, [
-    element("span", { className: "card-name", text: form.name.trim() || form.id.trim() || "Your mod" }),
+    element("span", { className: "card-name", text: form.name.trim() || form.id.trim() || (form.type === "modpack" ? "Your pack" : "Your mod") }),
   ]);
   if (authors.length) title.append(" ", element("span", { className: "card-by", text: `by ${authors.join(", ")}` }));
   const body = element("div", { className: "card-body" }, [
@@ -816,7 +888,7 @@ function renderSections() {
 function renderOutput() {
   $("output").value = current.text;
   $("output").rows = Math.max(6, current.text.split("\n").length + 1);
-  $("output-label").textContent = listingPath(current.document.id || "<id>");
+  $("output-label").textContent = documentPath(current.document);
   const blocked = current.messages.some((entry) => entry.level === ERROR) || !current.document.id;
   const link = $("open-pr");
   link.setAttribute("aria-disabled", blocked ? "true" : "false");
@@ -829,7 +901,7 @@ function renderOutput() {
 }
 
 function currentLink() {
-  return pullRequestLink(String(current.document.id || ""), current.text, state.mode === "edit" && state.base ? state.base.id : null);
+  return pullRequestLink(documentPath(current.document, encodeURIComponent), current.text, state.mode === "edit" && state.base ? state.base.id : null);
 }
 
 function refresh() {
@@ -838,7 +910,7 @@ function refresh() {
   current.document = documentFromForm(state.form, state.mode === "edit" ? state.base : null);
   current.text = writeDocument(current.document);
   current.messages = checker.check(current.document, { index, own, gameVersions: index ? index.gameVersions : null });
-  current.messages.push(...extraMessages());
+  current.messages.push(...extraMessages(), ...pinNotes(current.document, index), ...gameMinNotes(current.document, index));
   const explained = new Set(current.messages.filter((entry) => SPDX_DETAIL.test(entry.text)).map((entry) => entry.path));
   current.messages = current.messages.filter((entry) => !(explained.has(entry.path) && SPDX_SHAPE.test(entry.text)));
   const count = Array.from(state.form.abstract.trim()).length;
@@ -864,6 +936,7 @@ function renderAll() {
   renderExtraLinks();
   renderPlatforms();
   renderDependencies();
+  renderMembers();
   renderTags();
   renderImages();
   refresh();
@@ -972,10 +1045,10 @@ async function prefill() {
   const notes = [filled.length ? `Filled ${filled.join(", ")}. Check each value.` : "Nothing to fill, the fields already have values."];
   if (facts.fork) notes.push("The repository is a fork, so the first ownership proof, a repository in your own account, does not apply.");
   say("msg-prefill", null, notes.join(" "));
-  $("organization-note").hidden = !facts.organization;
   $("organization-note").textContent = facts.organization
     ? `${facts.owner} is an organization. Add the topic ksa-index-<your-github-username>, in lowercase, to ${repository}, or ask an owner of ${facts.owner} to add it.`
     : "";
+  renderTypeSections();
   refresh();
 }
 
@@ -1039,7 +1112,8 @@ function selectOutput() {
 function saveOutput() {
   const blob = new Blob([current.text], { type: "application/toml" });
   const url = URL.createObjectURL(blob);
-  const anchor = element("a", { href: url, download: `${current.document.id || "listing"}.toml` });
+  const name = current.document.type === "modpack" ? current.document.version || "version" : current.document.id || "listing";
+  const anchor = element("a", { href: url, download: `${name}.toml` });
   document.body.append(anchor);
   anchor.click();
   anchor.remove();
@@ -1121,6 +1195,7 @@ async function loadSnapshot() {
     index = null;
     snapshotState = "failed";
     status("The index snapshot did not load. The page still checks the file, but not the id against the listed ids.");
+    renderMembers();
     refresh();
     return;
   }
@@ -1130,6 +1205,7 @@ async function loadSnapshot() {
   if (newest) $("game-min").placeholder = newest;
   $("mod-ids").replaceChildren(...index.mods.map((id) => element("option", { value: id })));
   renderLoaderOptions();
+  renderMembers();
   refresh();
 }
 

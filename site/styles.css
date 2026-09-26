@@ -640,6 +640,11 @@ button.remove:hover {
   padding-right: 48px;
 }
 
+.postfix > select {
+  padding-right: 86px;
+  background-position: right 52px center;
+}
+
 .postfix > .remove {
   position: absolute;
   top: 6px;
