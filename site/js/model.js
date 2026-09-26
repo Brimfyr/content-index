@@ -3,6 +3,9 @@ import { RECORD_KEYS } from "./images.js";
 export const PLATFORMS = ["windows", "linux", "macos"];
 export const KINDS = ["required", "optional", "recommends", "suggests", "conflict"];
 export const ANCHORS = ["mods", "user-data", "game-root", "standalone"];
+export const TYPES = ["mod", "mod-loader", "modpack"];
+const PACK_KEYS = ["version", "released_at", "changelog", "mods"];
+const NOT_IN_PACK = ["releases", "loader", "dependencies", "install", "provides"];
 const FIXED_LINKS = ["forums", "homepage", "repository", "spacedock", "bugtracker", "discussions"];
 const LINK_ORDER = FIXED_LINKS;
 
@@ -54,7 +57,34 @@ export function emptyForm() {
     contentDir: "",
     contentPath: "",
     platforms: Object.fromEntries(PLATFORMS.map((name) => [name, { launch: "", runtime: "" }])),
+    version: "",
+    releasedAt: "",
+    changelog: "",
+    members: [],
   };
+}
+
+// The sections of the page that apply to each type. The form keeps the values
+// of a hidden section, so a type switched back finds them again.
+export function sectionsOf(type) {
+  const pack = type === "modpack";
+  return {
+    releases: !pack,
+    loader: type === "mod",
+    launch: type === "mod-loader",
+    dependencies: !pack,
+    pack,
+    members: pack,
+  };
+}
+
+// The word the page uses for what is listed, so a text visible for every type fits the chosen one.
+export function nounOf(type) {
+  return type === "modpack" ? "pack" : type === "mod-loader" ? "mod loader" : "mod";
+}
+
+export function releaseTime(date = new Date()) {
+  return date.toISOString().replace(/\.[0-9]+Z$/, "Z");
 }
 
 function recordForm(record, withId) {
@@ -66,7 +96,7 @@ function recordForm(record, withId) {
 export function formFromDocument(document) {
   const form = emptyForm();
   form.id = text(document.id);
-  form.type = document.type === "mod-loader" ? "mod-loader" : "mod";
+  form.type = TYPES.includes(document.type) ? document.type : "mod";
   const releases = isObject(document.releases) ? document.releases : {};
   form.github = text(releases.github);
   form.spacedock = text(releases.spacedock);
@@ -109,6 +139,11 @@ export function formFromDocument(document) {
     const entry = isObject(platforms[name]) ? platforms[name] : {};
     form.platforms[name] = { launch: text(entry.launch), runtime: text(entry.runtime) };
   }
+  form.version = text(document.version);
+  form.releasedAt = text(document.released_at);
+  form.changelog = text(document.changelog);
+  form.members = (Array.isArray(document.mods) ? document.mods : []).map((entry) =>
+    isObject(entry) ? { id: text(entry.id), version: text(entry.version) } : { kept: entry });
   return form;
 }
 
@@ -156,6 +191,25 @@ export function documentFromForm(form, base) {
   set(releases, "spacedock", integerOr(form.spacedock));
   set(releases, "authority", releases.github !== undefined && releases.spacedock !== undefined ? trimmed(form.authority) : "");
   set(document, "releases", releases);
+
+  if (form.type === "modpack") {
+    set(document, "version", trimmed(form.version));
+    set(document, "released_at", trimmed(form.releasedAt));
+    set(document, "changelog", text(form.changelog).trim() ? text(form.changelog) : "");
+    const members = [];
+    for (const entry of form.members) {
+      if (entry.kept !== undefined) {
+        members.push(entry.kept);
+        continue;
+      }
+      if (!trimmed(entry.id)) continue;
+      const member = {};
+      set(member, "id", trimmed(entry.id));
+      set(member, "version", trimmed(entry.version));
+      members.push(member);
+    }
+    set(document, "mods", members);
+  }
 
   const wanted = new Map(FIXED_LINKS.map((key) => [key, trimmed(form.links[key])]));
   for (const { key, url } of form.extraLinks) {
@@ -223,5 +277,6 @@ export function documentFromForm(form, base) {
     set(provides, "platform", platforms);
     set(document, "provides", provides);
   }
+  for (const key of form.type === "modpack" ? NOT_IN_PACK : PACK_KEYS) delete document[key];
   return document;
 }

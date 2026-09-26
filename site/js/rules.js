@@ -12,9 +12,11 @@ export const ABSTRACT_LIMIT = 280;
 export const TAGS_SPEC = "https://github.com/KSAModding/content-manager-design/blob/main/spec/tags.md";
 const SPDX_LIST = "https://spdx.org/licenses/";
 const TAG_VOCABULARY = { mod: "mod", "mod-loader": "mod", modpack: "mod" };
+const PINNED_SECTIONS = ["mods", "vehicles", "saves"];
 
 const REVISION_BOUND = /^[0-9]{4}\.[0-9]+\.[0-9]+\.([0-9]+)(?![\s\S])/;
 const MONTH_BOUND = /^([0-9]{4})\.([0-9]+)(?![\s\S])/;
+const TIMESTAMP = /^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})/;
 const GAME_VERSION = /^v?(\d+)\.(\d+)\.(\d+)\.(\d+)(?:-[^+]+)?(?:\+.*)?$/;
 const LICENSE_REF = /^(?:DocumentRef-[A-Za-z0-9.-]+:)?LicenseRef-[A-Za-z0-9.-]+(?![\s\S])/;
 const THREAD_ID = "[0-9]+";
@@ -259,6 +261,23 @@ function checkParentheses(expression, found) {
   }
 }
 
+function daysIn(year, month) {
+  if (month === 2) return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28;
+  return [4, 6, 9, 11].includes(month) ? 30 : 31;
+}
+
+// The schema checks the shape of released_at. This checks that the calendar has
+// that day and time, as check_schema.check_timestamp does.
+function checkTimestamp(value, found) {
+  if (typeof value !== "string") return;
+  const parts = TIMESTAMP.exec(value);
+  if (!parts) return;
+  const [year, month, day, hour, minute, second] = parts.slice(1).map(Number);
+  const real = year >= 1 && month >= 1 && month <= 12 && day >= 1 && day <= daysIn(year, month)
+    && hour <= 23 && minute <= 59 && second <= 59;
+  if (!real) found.push(message(ERROR, "released_at", `'${value}' is not a real date and time`));
+}
+
 function checkLinkKeys(links, found) {
   if (!isObject(links)) return;
   const seen = new Map();
@@ -297,12 +316,29 @@ function checkDependencies(document, own, found) {
   });
 }
 
+function checkPins(document, own, found) {
+  const pinned = new Map();
+  for (const section of PINNED_SECTIONS) {
+    const entries = document[section];
+    if (!Array.isArray(entries)) continue;
+    entries.forEach((entry, index) => {
+      const identifier = isObject(entry) ? fold(entry.id) : null;
+      if (identifier === null) return;
+      const where = `${section}[${index}]`;
+      if (identifier === own) found.push(message(ERROR, where, "a pack cannot pin itself"));
+      else if (pinned.has(identifier)) found.push(message(ERROR, where, `'${entry.id}' is pinned by ${pinned.get(identifier)}`));
+      if (!pinned.has(identifier)) pinned.set(identifier, where);
+    });
+  }
+}
+
 export function documentRules(document) {
   const found = [];
   const own = fold(document.id);
   checkLinkKeys(document.links, found);
   if (isObject(document.compatibility)) checkGameBounds(document.compatibility, found);
   checkParentheses(document.license, found);
+  checkTimestamp(document.released_at, found);
   if (typeof document.superseded_by === "string" && fold(document.superseded_by) === own) {
     found.push(message(ERROR, "superseded_by", "a listing cannot supersede itself"));
   }
@@ -311,6 +347,7 @@ export function documentRules(document) {
     if (fold(document.loader.id) === own) found.push(message(ERROR, "loader", "a listing cannot be its own loader"));
   }
   checkDependencies(document, own, found);
+  checkPins(document, own, found);
   return found;
 }
 
@@ -550,6 +587,16 @@ export function indexRules(document, index, own) {
         if (type && type !== "mod") {
           found.push(message(ERROR, where, `'${member.id}' is listed as a ${type}, and a dependency has to be a mod`));
         }
+      }
+    });
+  }
+  for (const section of PINNED_SECTIONS) {
+    if (!Array.isArray(document[section])) continue;
+    document[section].forEach((member, number) => {
+      if (!isObject(member)) return;
+      const where = `${section}[${number}]`;
+      if (resolve(member.id, where) === "modpack") {
+        found.push(message(ERROR, where, `'${member.id}' is itself a pack, and a pack does not nest in spec_version 1`));
       }
     });
   }

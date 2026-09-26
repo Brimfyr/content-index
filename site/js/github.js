@@ -9,12 +9,23 @@ export function listingPath(id) {
   return `listings/${id}.toml`;
 }
 
+export function packPath(id, version) {
+  return `packs/${id}/${version}.toml`;
+}
+
+// The path a document belongs at, with a placeholder for what is not written yet.
+// A link encodes each part, so an id or a version cannot add a folder.
+export function documentPath(document, encode = (part) => part) {
+  const id = encode(String(document.id || "<id>"));
+  return document.type === "modpack" ? packPath(id, encode(String(document.version || "<version>"))) : listingPath(id);
+}
+
 export function rawListingUrl(id) {
   return `https://raw.githubusercontent.com/${INDEX_REPOSITORY}/main/${listingPath(encodeURIComponent(id))}`;
 }
 
-export function newFileUrl(id, text) {
-  const base = `https://github.com/${INDEX_REPOSITORY}/new/main?filename=${listingPath(encodeURIComponent(id))}`;
+export function newFileUrl(encodedPath, text) {
+  const base = `https://github.com/${INDEX_REPOSITORY}/new/main?filename=${encodedPath}`;
   const filled = `${base}&value=${encodeURIComponent(text)}`;
   return filled.length <= URL_LIMIT ? { url: filled, filled: true } : { url: base, filled: false };
 }
@@ -23,9 +34,9 @@ export function editUrl(id) {
   return `https://github.com/${INDEX_REPOSITORY}/edit/main/${listingPath(encodeURIComponent(id))}`;
 }
 
-export function pullRequestLink(id, text, baseId = null) {
+export function pullRequestLink(encodedPath, text, baseId = null) {
   if (baseId) return { url: editUrl(baseId), step: PASTE_EDIT };
-  const link = newFileUrl(id, text);
+  const link = newFileUrl(encodedPath, text);
   return { url: link.url, step: link.filled ? "" : PASTE_NEW };
 }
 

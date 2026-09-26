@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { parseDocument, writeDocument } from "../js/toml.js";
 import { emptyForm, formFromDocument, documentFromForm } from "../js/model.js";
-import { newFileUrl, editUrl, pullRequestLink, copyAndOpen, prefillFromRepository, repositoryApiUrl, URL_LIMIT, PASTE_NEW, PASTE_EDIT } from "../js/github.js";
+import { newFileUrl, editUrl, pullRequestLink, copyAndOpen, prefillFromRepository, repositoryApiUrl, listingPath, packPath, documentPath, URL_LIMIT, PASTE_NEW, PASTE_EDIT } from "../js/github.js";
 
 const LISTINGS = new URL("../../listings/", import.meta.url);
 
@@ -99,10 +99,10 @@ test("two release hosts keep the authority, one host drops it", () => {
 });
 
 test("the new-file address carries the file until it gets too long", () => {
-  const short = newFileUrl("MyMod", "id = \"MyMod\"\n");
+  const short = newFileUrl(listingPath("MyMod"), "id = \"MyMod\"\n");
   assert.equal(short.filled, true);
   assert.equal(short.url, "https://github.com/KSAModding/content-index/new/main?filename=listings/MyMod.toml&value=id%20%3D%20%22MyMod%22%0A");
-  const long = newFileUrl("MyMod", "x".repeat(URL_LIMIT));
+  const long = newFileUrl(listingPath("MyMod"), "x".repeat(URL_LIMIT));
   assert.equal(long.filled, false);
   assert.equal(long.url, "https://github.com/KSAModding/content-index/new/main?filename=listings/MyMod.toml");
   assert.equal(editUrl("MyMod"), "https://github.com/KSAModding/content-index/edit/main/listings/MyMod.toml");
@@ -113,13 +113,13 @@ test("a new listing gets the plain link and the paste step once the link would p
   const plain = "https://github.com/KSAModding/content-index/new/main?filename=listings/StarMap.toml";
   const filled = `${plain}&value=${encodeURIComponent(text)}`;
   assert.ok(filled.length > URL_LIMIT && filled.length < 5900, "the fixture sits between the limit and the link GitHub refused");
-  assert.deepEqual(pullRequestLink("StarMap", text), { url: plain, step: PASTE_NEW });
+  assert.deepEqual(pullRequestLink(listingPath("StarMap"), text), { url: plain, step: PASTE_NEW });
   const short = "id = \"MyMod\"\n";
-  assert.deepEqual(pullRequestLink("MyMod", short), { url: newFileUrl("MyMod", short).url, step: "" });
+  assert.deepEqual(pullRequestLink(listingPath("MyMod"), short), { url: newFileUrl(listingPath("MyMod"), short).url, step: "" });
 });
 
 test("a changed listing opens the edit page and says to replace the whole file", () => {
-  assert.deepEqual(pullRequestLink("MyMod", "id = \"MyMod\"\n", "MyMod"), {
+  assert.deepEqual(pullRequestLink(listingPath("MyMod"), "id = \"MyMod\"\n", "MyMod"), {
     url: "https://github.com/KSAModding/content-index/edit/main/listings/MyMod.toml",
     step: PASTE_EDIT,
   });

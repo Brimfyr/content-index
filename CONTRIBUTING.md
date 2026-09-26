@@ -117,6 +117,11 @@ A first pack claim adds the pack version and `packs/<id>/owner.json` in the same
 The owner record names the pull request author's GitHub login and numeric account id.
 A steward must accept this first claim because a pack has no release host that can prove ownership.
 
+The [listing page](https://ksamodding.github.io/content-index/) writes the first version of a new pack when you set the type to `modpack`.
+You pick each member from the listed mods and their releases that are not yanked, and the page opens GitHub at `packs/<id>/<version>.toml`.
+It does not write `owner.json`, so add that file yourself.
+The page does not yet write a later version of a pack that is in the index, so write that file by hand.
+
 The accepted owner record is read only from the base branch.
 Changing owner data in a pull request cannot grant ownership or make that pull request merge itself.
 

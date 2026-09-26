@@ -36,3 +36,20 @@ test("every label, hint and message container belongs to a field of the markup",
     }
   }
 });
+
+test("the type is chosen before the releases and the id", () => {
+  const type = html.indexOf('id="type"');
+  assert.ok(type > 0 && type < html.indexOf('id="releases-section"') && type < html.indexOf('id="id"'));
+});
+
+test("a text that a pack shows names what is listed through the word the type sets", () => {
+  for (const id of ["hint-forums", "hint-link-spacedock", "hint-game-min", "hint-game-max"]) {
+    const hint = new RegExp(`<p id="${id}"[^>]*>([\\s\\S]*?)</p>`).exec(html)[1];
+    assert.match(hint, /<span class="noun">mod<\/span>/, id);
+    assert.doesNotMatch(hint.replace(/<span class="noun">mod<\/span>/g, ""), /\b(your|the) mod\b/, id);
+  }
+  assert.match(html, /<label for="license">License of your <span class="noun">mod<\/span><\/label>/);
+  const render = /function renderTypeSections\(\) \{([\s\S]*?)\n\}/.exec(app)[1];
+  assert.match(render, /querySelectorAll\("\.noun"\)\) word\.textContent = nounOf\(state\.form\.type\)/);
+  assert.match(render, /querySelectorAll\("\.not-pack"\)\) part\.hidden = shown\.pack/);
+});

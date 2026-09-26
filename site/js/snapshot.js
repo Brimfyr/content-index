@@ -13,11 +13,26 @@ export function newestStable(releases) {
   return stable.length ? stable[0].version : null;
 }
 
+// The releases a pack can pin, which are stamped and not yanked, newest first.
+export function pinnableReleases(releases) {
+  const kept = (Array.isArray(releases) ? releases : [])
+    .filter((release) => release && !release.yanked && typeof release.version === "string")
+    .map((release) => ({
+      version: release.version,
+      status: typeof release.release_status === "string" ? release.release_status : "",
+      gameMin: typeof release.game_min === "string" ? release.game_min : "",
+      gameMinRevision: Number.isInteger(release.game_min_revision) ? release.game_min_revision : null,
+    }));
+  kept.sort((a, b) => -(semverCompare(a.version, b.version) ?? 0));
+  return kept;
+}
+
 export function indexFacts(snapshot, threadPattern) {
   const holders = new Map();
   const threads = [];
   const loaders = [];
   const mods = [];
+  const members = [];
   for (const listing of Array.isArray(snapshot.listings) ? snapshot.listings : []) {
     if (!listing || typeof listing.id !== "string") continue;
     const folded = listing.id.toLowerCase();
@@ -29,6 +44,11 @@ export function indexFacts(snapshot, threadPattern) {
     if (thread !== null) threads.push({ holder: folded, where, thread });
     if (type === "mod-loader") loaders.push({ id: listing.id, newest: newestStable(listing.releases) });
     if (type === "mod") mods.push(listing.id);
+    const delisted = listing.index_status && listing.index_status.state === "delisted";
+    if (type === "mod" && !delisted) {
+      const name = typeof authored.name === "string" ? authored.name : "";
+      members.push({ id: listing.id, name, releases: pinnableReleases(listing.releases) });
+    }
   }
   for (const pack of Array.isArray(snapshot.packs) ? snapshot.packs : []) {
     if (!pack || typeof pack.id !== "string") continue;
@@ -51,7 +71,8 @@ export function indexFacts(snapshot, threadPattern) {
     : [];
   loaders.sort((a, b) => a.id.localeCompare(b.id));
   mods.sort((a, b) => a.localeCompare(b));
-  return { holders, threads, threadPattern, loaders, mods, gameVersions };
+  members.sort((a, b) => a.id.localeCompare(b.id));
+  return { holders, threads, threadPattern, loaders, mods, members, gameVersions };
 }
 
 export function gameVersionChoices(gameVersions) {

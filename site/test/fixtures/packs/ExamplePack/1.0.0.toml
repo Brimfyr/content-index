@@ -1,0 +1,25 @@
+spec_version = 1
+id = "ExamplePack"
+type = "modpack"
+name = "Example Pack"
+authors = ["Example Author"]
+abstract = "Two mods for mission planning."
+license = "MIT"
+tags = ["user-interface"]
+version = "1.0.0"
+released_at = "2026-09-25T12:00:00Z"
+changelog = "The first version."
+
+[links]
+forums = "https://forums.ahwoo.com/threads/example-pack.1/"
+
+[compatibility]
+game_min = "2026.9.22.5482"
+
+[[mods]]
+id = "DeltaVMap"
+version = "1.2.7"
+
+[[mods]]
+id = "Compendium"
+version = "0.9.13"
