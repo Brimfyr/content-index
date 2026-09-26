@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 import urllib.error
+import urllib.parse
 from pathlib import Path
 from unittest import mock
 
@@ -16,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import check_scope
 import decide
 import ownership
+import pack_ownership
 
 WORKFLOWS = Path(__file__).resolve().parent.parent / ".github/workflows"
 
@@ -120,6 +122,7 @@ class RecordingApi:
         self.labels = list(labels)
         self.reviewers = reviewers or {"teams": []}
         self.files = {"listings/AutoStage.toml": LISTING} if files is None else files
+        self.folders = {}
         self.repositories = repositories or {}
         self.spacedock = spacedock or {}
         self.repository_reads = []
@@ -154,6 +157,9 @@ class RecordingApi:
         if (path, ref) in self.files:
             return self.files[(path, ref)]
         return self.files.get(path)
+
+    def folder(self, path, ref):
+        return self.folders.get((path, ref), [])
 
     # What OwnershipApi forwards to a release host.
     def repository_of(self, full_name):
@@ -293,6 +299,53 @@ class Table(unittest.TestCase):
     def test_the_run_url_is_linked_when_given(self):
         decision = decide.decide(verdict("reject"), True, VERIFIED, run_url="https://x/run/1")
         self.assertIn("https://x/run/1", decision.comment)
+
+
+class OwnerAdvice(unittest.TestCase):
+    PATH = "packs/Starter/owner.json"
+
+    def test_a_head_repository_that_is_gone_gets_the_record_without_a_link(self):
+        pull = pull_request()
+        pull["head"]["repo"] = None
+        [paragraph] = decide.owner_advice(pull, [self.PATH])
+        self.assertIn('"github_login": "Maxi"', paragraph)
+        self.assertIn('"github_id": 7', paragraph)
+        self.assertNotIn("https://", paragraph)
+        self.assertIn("no link", paragraph)
+
+    def test_the_branch_name_cannot_leave_the_link(self):
+        [paragraph] = decide.owner_advice(pull_request(branch="a) [b](c d"), [self.PATH])
+        link = re.search(r"\]\((https://[^)\s]+)\)", paragraph).group(1)
+        self.assertEqual(urllib.parse.urlsplit(link).path, f"/{FORK}/new/a%29%20%5Bb%5D%28c%20d")
+
+    def test_a_path_that_is_not_plain_gets_nothing(self):
+        self.assertEqual(decide.owner_advice(pull_request(), ["packs/a`b/owner.json"]), [])
+
+    def test_an_author_without_an_account_id_gets_nothing(self):
+        pull = pull_request()
+        pull["user"] = {"login": "Maxi"}
+        self.assertEqual(decide.owner_advice(pull, [self.PATH]), [])
+
+    def test_the_advice_reaches_the_comment_of_every_outcome(self):
+        cases = [
+            (verdict("reject"), True, UNVERIFIED),
+            (verdict("could-not-evaluate"), True, UNVERIFIED),
+            (verdict(), True, REJECTED),
+            (verdict(), False, UNVERIFIED),
+            (verdict(), True, VERIFIED),
+            (verdict(), True, UNAVAILABLE),
+            (verdict(), True, UNVERIFIED),
+        ]
+        for document, candidate, result in cases:
+            decision = decide.decide(document, candidate, result, "", ["the owner record"])
+            self.assertIn("the owner record", decision.comment)
+
+    def test_checks_run_again_on_every_push_to_a_pull_request(self):
+        # The advice promises that a commit to the head branch runs the checks again.
+        text = (WORKFLOWS / "checks.yml").read_text(encoding="utf-8")
+        trigger = re.search(r"(?m)^on:\n  pull_request:[ \t]*\n((?:    .*\n)*)", text)
+        self.assertIsNotNone(trigger)
+        self.assertEqual(trigger.group(1), "", "the pull_request trigger is narrowed")
 
 
 class Agreement(unittest.TestCase):
@@ -833,6 +886,40 @@ class SpaceDockApi(unittest.TestCase):
                 self.fetch(answer=Answer(body))
 
 
+class FolderApi(unittest.TestCase):
+    """How `Api.folder` lists a folder of the index on a branch."""
+
+    def fetch(self, answer=None, error=None):
+        opener = mock.Mock(side_effect=error) if error else mock.Mock(return_value=answer)
+        api = decide.Api("KSAModding/content-index", "app", public_token="workflow")
+        with mock.patch.object(decide.urllib.request, "urlopen", opener):
+            result = api.folder("packs", "main")
+        return result, opener
+
+    def test_the_entries_come_back_as_names_and_types(self):
+        body = json.dumps([{"name": "Starter", "type": "dir"}, {"name": "README.md", "type": "file"}])
+        entries, opener = self.fetch(answer=Answer(body.encode()))
+        self.assertEqual(entries, [("Starter", "dir"), ("README.md", "file")])
+        request = opener.call_args.args[0]
+        self.assertEqual(
+            request.full_url,
+            "https://api.github.com/repos/KSAModding/content-index/contents/packs?ref=main",
+        )
+
+    def test_a_folder_that_is_not_there_has_no_entries(self):
+        entries, _ = self.fetch(error=http_error(404))
+        self.assertEqual(entries, [])
+
+    def test_a_listing_the_api_may_cut_short_is_unavailable(self):
+        body = json.dumps([{"name": f"p{n}", "type": "dir"} for n in range(1000)])
+        with self.assertRaises(ownership.Unavailable):
+            self.fetch(answer=Answer(body.encode()))
+
+    def test_a_file_is_not_a_folder(self):
+        with self.assertRaises(ownership.Unavailable):
+            self.fetch(answer=Answer(b'{"name": "packs", "type": "file"}'))
+
+
 class AutoMerge(unittest.TestCase):
     def test_a_clean_answer_is_armed(self):
         api = RecordingApi()
@@ -1141,6 +1228,61 @@ class Act(unittest.TestCase):
             self.assertEqual(self.act(), 0)
         self.assertEqual(self.api.graphql_calls, [{"id": "PR_5"}])
         self.assertEqual(self.statuses()[-1]["state"], "success")
+
+    def pack_claim(self, *changes):
+        with mock.patch.object(
+            decide, "changed_paths",
+            lambda api, number: [check_scope.Change(path, "added") for path in changes],
+        ):
+            self.assertEqual(self.act(verdict("reject")), 0)
+        return [p for _, path, p, _ in self.api.sent if path.endswith("/comments")][0]["body"]
+
+    def test_a_first_pack_claim_without_its_owner_record_gets_the_record_and_a_link(self):
+        self.api.files = {}
+        body = self.pack_claim("packs/Starter/1.0.0.toml")
+
+        text = re.search(r"```json\n(.*?)\n```", body, re.S).group(1) + "\n"
+        record, problem = pack_ownership.parse_record(text, "the comment")
+        self.assertEqual(problem, "")
+        self.assertEqual(record, {"github_login": "Maxi", "github_id": 7})
+
+        link = re.search(r"\]\((https://[^)]+)\)", body).group(1)
+        address = urllib.parse.urlsplit(link)
+        self.assertEqual(address.path, f"/{FORK}/new/{BRANCH}")
+        query = urllib.parse.parse_qs(address.query)
+        self.assertEqual(query["filename"], ["packs/Starter/owner.json"])
+        self.assertEqual(query["value"], [text])
+        self.assertLess(body.index(link), body.index("Push a fix"))
+
+    def test_a_first_pack_claim_with_its_owner_record_gets_no_link(self):
+        self.api.files = {}
+        body = self.pack_claim("packs/Starter/1.0.0.toml", "packs/Starter/owner.json")
+        self.assertNotIn("/new/", body)
+        self.assertNotIn("```json", body)
+
+    def test_a_later_pack_version_gets_no_link(self):
+        self.api.files = {("packs/Starter/owner.json", "main"): json.dumps({"github_login": "Maxi", "github_id": 7})}
+        self.api.folders = {("packs", "main"): [("Starter", "dir")]}
+        body = self.pack_claim("packs/Starter/2.0.0.toml")
+        self.assertNotIn("/new/", body)
+        self.assertNotIn("```json", body)
+
+    def test_a_case_variant_of_a_held_pack_id_gets_no_link(self):
+        self.api.files = {}
+        self.api.folders = {("packs", "main"): [("Starter", "dir")]}
+        body = self.pack_claim("packs/starter/1.0.0.toml")
+        self.assertNotIn("/new/", body)
+        self.assertNotIn("```json", body)
+
+    def test_a_pack_path_that_is_not_plain_still_gets_the_rejection(self):
+        # http.client refuses such a path in a URL, so no read may carry it.
+        self.api.files = {}
+        refused = mock.Mock(side_effect=UnicodeEncodeError("ascii", "", 0, 1, "not ASCII"))
+        with mock.patch.object(self.api, "file", refused):
+            body = self.pack_claim("packs/My Pack/1.0.0.toml", "packs/Caf\u00e9/1.0.0.toml")
+        self.assertIn("The validation rejected this change.", body)
+        self.assertNotIn("```json", body)
+        self.assertEqual(self.statuses()[-1]["state"], "failure")
 
     def test_a_change_that_touches_no_document_carries_no_kind(self):
         with mock.patch.object(

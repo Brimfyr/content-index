@@ -13,6 +13,10 @@ export function packPath(id, version) {
   return `packs/${id}/${version}.toml`;
 }
 
+export function ownerPath(id) {
+  return `packs/${id}/owner.json`;
+}
+
 // The path a document belongs at, with a placeholder for what is not written yet.
 // A link encodes each part, so an id or a version cannot add a folder.
 export function documentPath(document, encode = (part) => part) {
@@ -31,6 +35,10 @@ export function rawListingUrl(id) {
 
 export function rawPackUrl(id, version) {
   return rawFileUrl(packPath(encodeURIComponent(id), encodeURIComponent(version)));
+}
+
+export function rawOwnerUrl(id) {
+  return rawFileUrl(ownerPath(encodeURIComponent(id)));
 }
 
 export function newFileUrl(encodedPath, text) {

@@ -30,7 +30,7 @@ https://ksamodding.github.io/content-index-releases/v1/index.json
 | `schemas/` | What a document may contain, as JSON Schema. See its [README](schemas/README.md). |
 | `tools/` | The checks that run on every pull request. |
 | `schemas/vectors.json` | Test documents with the result the checks give, which `tools/test_vectors.py` and the tests of the listing page both run, so the page and the checks keep one rule set. |
-| `site/` | The [listing page](https://ksamodding.github.io/content-index/), which writes a listing or a pack version, or changes a listing, and checks it in the browser before the pull request. It uses the schema and `tags.toml` of the commit it was deployed from. |
+| `site/` | The [listing page](https://ksamodding.github.io/content-index/), which writes a listing or a pack version, or changes a listing, and checks it in the browser before the pull request. It also says whether a pack id is free and writes the owner record of a first pack claim. It uses the schema and `tags.toml` of the commit it was deployed from. |
 
 ## Getting listed
 

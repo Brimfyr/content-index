@@ -5,15 +5,18 @@ import { emptyForm, emptyRecord, formFromDocument, documentFromForm, isFixedLink
 import { measure, readCapped, LIMITS, MEASURE_FACTOR, ICON, DESCRIPTION } from "./images.js";
 import { renderPreview } from "./markdown.js";
 import { zipNames, inspectArchive, StampError } from "./archive.js";
-import { pullRequestLink, copyAndOpen, rawListingUrl, rawPackUrl, repositoryApiUrl, prefillFromRepository, listingPath, packPath, documentPath } from "./github.js";
+import {
+  pullRequestLink, copyAndOpen, rawListingUrl, rawPackUrl, rawOwnerUrl, repositoryApiUrl, prefillFromRepository, listingPath, packPath, ownerPath, documentPath,
+} from "./github.js";
 import {
   memberChoices, versionChoices, defaultVersion, pinNotes, gameMinNotes, packOf, ownIds, nextPackForm, freeVersion, newerNotes, nextVersionNotes, forumLines,
 } from "./pack.js";
+import { isLogin, userApiUrl, ownerRecordText, accountFromAnswer, packIdState, firstClaimText, FREE } from "./owner.js";
 
 const STORAGE_KEY = "ksa-listing-page/v1";
 const TIMEOUT = 20000;
 const SECTION_INPUTS = { links: "link-forums", compatibility: "game-min" };
-const MANUAL = new Set(["msg-load", "msg-prefill", "msg-output", "msg-pr", "msg-forum-list", "archive-result"]);
+const MANUAL = new Set(["msg-load", "msg-prefill", "msg-output", "msg-pr", "msg-forum-list", "msg-owner", "msg-owner-file", "archive-result"]);
 const ROW_MESSAGES = ["link", "dependency", "member"];
 
 const $ = (id) => document.getElementById(id);
@@ -31,6 +34,8 @@ let saveTimer = null;
 const touched = new Set();
 let tagsTouched = false;
 let needsLoader = false;
+let ownerCheck = null;
+let ownerTicket = null;
 
 function element(tag, attributes = {}, children = []) {
   const node = document.createElement(tag);
@@ -191,6 +196,16 @@ function bindStatic() {
     refresh();
   });
   $("copy-forum-list").addEventListener("click", copyForumList);
+  $("owner-check").addEventListener("click", checkOwner);
+  $("owner-login").addEventListener("input", renderOwner);
+  $("owner-login").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      checkOwner();
+    }
+  });
+  $("copy-owner").addEventListener("click", () => copyText("msg-owner-file", ownerRecordText(ownerCheck.account), "owner.json", "file", "Copied."));
+  $("save-owner").addEventListener("click", () => download("owner.json", ownerRecordText(ownerCheck.account), "application/json"));
   $("add-tag").addEventListener("click", addFreeTag);
   $("tag-input").addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
@@ -957,6 +972,7 @@ function refresh() {
   renderOutput();
   renderArchiveResult();
   renderDescriptionPreview();
+  renderOwner();
   persist();
 }
 
@@ -1194,10 +1210,13 @@ function selectOutput() {
 }
 
 function saveOutput() {
-  const blob = new Blob([current.text], { type: "application/toml" });
-  const url = URL.createObjectURL(blob);
   const name = current.document.type === "modpack" ? current.document.version || "version" : current.document.id || "listing";
-  const anchor = element("a", { href: url, download: `${name}.toml` });
+  download(`${name}.toml`, current.text, "application/toml");
+}
+
+function download(name, text, type) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const anchor = element("a", { href: url, download: name });
   document.body.append(anchor);
   anchor.click();
   anchor.remove();
@@ -1265,16 +1284,77 @@ async function copyForumList() {
     say("msg-forum-list", ERROR, "Choose a release for every member first.");
     return;
   }
-  const text = lines.join("\n");
+  await copyText("msg-forum-list", lines.join("\n"), "Member list", "list", "Copied. Paste it into the first post of your forum thread.");
+}
+
+async function copyText(target, text, label, noun, done) {
   try {
     await navigator.clipboard.writeText(text);
-    say("msg-forum-list", null, "Copied. Paste it into the first post of your forum thread.");
+    say(target, null, done);
   } catch {
-    const box = element("textarea", { readonly: true, spellcheck: "false", "aria-label": "Member list", rows: text.split("\n").length + 1, text });
-    $("msg-forum-list").replaceChildren(line(NOTE, "The browser did not allow copying. The list is selected, copy it by hand."), box);
+    const box = element("textarea", { readonly: true, spellcheck: "false", "aria-label": label, rows: text.split("\n").length + 1, text });
+    $(target).replaceChildren(line(NOTE, `The browser did not allow copying. The ${noun} is selected, copy it by hand.`), box);
     box.focus();
     box.select();
   }
+}
+
+async function lookupAccount(login) {
+  try {
+    const response = await fetch(userApiUrl(login), {
+      headers: { Accept: "application/vnd.github+json" }, cache: "no-store", signal: AbortSignal.timeout(TIMEOUT),
+    });
+    return accountFromAnswer(login, response.status, response.ok ? await response.json() : null);
+  } catch {
+    return accountFromAnswer(login, null, null);
+  }
+}
+
+// The id and the login of a check both come from the form, so a check that
+// either has moved away from is no longer shown.
+async function checkOwner() {
+  const id = current.document.id;
+  const login = $("owner-login").value.trim();
+  if (!id) {
+    say("msg-owner", ERROR, "Give the id of the pack first.");
+    return;
+  }
+  if (!isLogin(login)) {
+    say("msg-owner", ERROR, login ? `'${login}' is not a GitHub login.` : "Give your GitHub login first.");
+    return;
+  }
+  const ticket = {};
+  ownerTicket = ticket;
+  ownerCheck = null;
+  say("msg-owner-file");
+  renderOwner();
+  say("msg-owner", null, "Asking GitHub.");
+  const [recorded, lookup] = await Promise.all([fetchRaw(rawOwnerUrl(id), ownerPath(id)), lookupAccount(login)]);
+  if (ownerTicket !== ticket || current.document.id !== id || $("owner-login").value.trim() !== login) {
+    if (ownerTicket === ticket) say("msg-owner");
+    return;
+  }
+  const answer = packIdState(id, index, recorded, lookup.account);
+  ownerCheck = { id, login, state: answer.state, account: lookup.account };
+  $("msg-owner").replaceChildren(line(answer.level, answer.text), ...(lookup.account ? [] : [line(lookup.level, lookup.text)]));
+  renderOwner();
+}
+
+function renderOwner() {
+  if (ownerCheck && (ownerCheck.id !== current.document.id || ownerCheck.login !== $("owner-login").value.trim())) {
+    ownerCheck = null;
+    ownerTicket = null;
+    say("msg-owner");
+    say("msg-owner-file");
+  }
+  const claim = Boolean(ownerCheck) && ownerCheck.state === FREE;
+  $("owner-claim").hidden = !claim;
+  if (!claim) return;
+  $("owner-claim-text").textContent = ownerCheck.account
+    ? `${firstClaimText(ownerCheck.id)} You can also copy or save the file now.`
+    : firstClaimText(ownerCheck.id);
+  $("copy-owner").hidden = !ownerCheck.account;
+  $("save-owner").hidden = !ownerCheck.account;
 }
 
 async function loadText(url) {

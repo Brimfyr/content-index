@@ -117,9 +117,18 @@ A first pack claim adds the pack version and `packs/<id>/owner.json` in the same
 The owner record names the pull request author's GitHub login and numeric account id.
 A steward must accept this first claim because a pack has no release host that can prove ownership.
 
+You can open the pull request with the version alone.
+When a first claim has no `owner.json`, the comment of the bot gives the exact content of the file and a link that opens GitHub's new-file page for `packs/<id>/owner.json` on the branch of your pull request, with the content filled in.
+Commit the file there, and the checks run again.
+If GitHub opens an empty file, paste the content from the comment.
+The checks stay red until the file is there.
+The checks of a pull request from a new GitHub account can wait until a steward starts them.
+
 The [listing page](https://ksamodding.github.io/content-index/) writes the first version of a new pack when you set the type to `modpack`.
 You pick each member from the listed mods and their releases that are not yanked, and the page opens GitHub at `packs/<id>/<version>.toml`.
-It does not write `owner.json`, so add that file yourself.
+"Check the id" tells you whether the pack id is free, yours, or held by another account, in which case a steward decides.
+For a free id, it also writes `owner.json` from your GitHub login and numeric account id, to copy or to save.
+[Borea](https://ksamodding.github.io/Borea/) is getting a pack editor that opens the pull request with both files at once ([Borea#566](https://github.com/KSAModding/Borea/issues/566)).
 For a later version, choose "Change a listed one" and load the pack id.
 The page loads the newest version from `main` and raises the version above every version file there, retracted ones included, and it sets the release time to now.
 It shows the reason of a retracted version, marks a member that has a newer release at least as stable as its pin, and opens GitHub at the new file.
