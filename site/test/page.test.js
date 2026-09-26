@@ -53,3 +53,20 @@ test("a text that a pack shows names what is listed through the word the type se
   assert.match(render, /querySelectorAll\("\.noun"\)\) word\.textContent = nounOf\(state\.form\.type\)/);
   assert.match(render, /querySelectorAll\("\.not-pack"\)\) part\.hidden = shown\.pack/);
 });
+
+function body(start) {
+  const from = app.indexOf(start);
+  assert.ok(from >= 0, `js/app.js has no ${start}`);
+  return app.slice(from, app.indexOf("\n}\n", from));
+}
+
+test("a refused tag shows at the tag input and does not outlive its form", () => {
+  const input = html.match(/<input id="tag-input"[^>]*>/);
+  assert.ok(input && /aria-describedby="[^"]*\bmsg-tags\b/.test(input[0]), "the tag input does not name msg-tags");
+  const clear = body("function clearTagEntry()");
+  assert.match(clear, /tagError = null;/);
+  assert.match(clear, /\$\("tag-input"\)\.value = "";/);
+  for (const start of ['$("reset").addEventListener', "function useBase("]) {
+    assert.match(body(start), /clearTagEntry\(\);/, `${start} keeps the refused tag of the earlier form`);
+  }
+});

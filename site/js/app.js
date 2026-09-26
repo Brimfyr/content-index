@@ -1,4 +1,4 @@
-import { createChecker, ERROR, NOTE, ABSTRACT_LIMIT } from "./rules.js";
+import { createChecker, addTag, ERROR, NOTE, ABSTRACT_LIMIT } from "./rules.js";
 import { parseDocument, writeDocument } from "./toml.js";
 import { indexFacts, gameVersionChoices, SNAPSHOT_URL } from "./snapshot.js";
 import { emptyForm, emptyRecord, formFromDocument, documentFromForm, isFixedLink, sectionsOf, nounOf, releaseTime, KINDS, PLATFORMS } from "./model.js";
@@ -33,6 +33,7 @@ let current = { document: {}, text: "", messages: [] };
 let saveTimer = null;
 const touched = new Set();
 let tagsTouched = false;
+let tagError = null;
 let needsLoader = false;
 let ownerCheck = null;
 let ownerTicket = null;
@@ -213,6 +214,11 @@ function bindStatic() {
       addFreeTag();
     }
   });
+  $("tag-input").addEventListener("input", () => {
+    if (!tagError) return;
+    tagError = null;
+    refresh();
+  });
   $("add-icon").addEventListener("click", () => {
     state.form.icon = emptyRecord(false);
     renderImages();
@@ -253,6 +259,7 @@ function bindStatic() {
     archiveNames = null;
     archiveTicket = null;
     $("archive").value = "";
+    clearTagEntry();
     say("archive-result");
     say("msg-load");
     say("msg-prefill");
@@ -515,13 +522,22 @@ function renderTags() {
 }
 
 function addFreeTag() {
-  const tag = $("tag-input").value.trim();
+  if (!checker) return;
   tagsTouched = true;
-  if (!tag) return;
-  if (!state.form.tags.includes(tag)) state.form.tags.push(tag);
-  $("tag-input").value = "";
+  const added = addTag(state.form.tags, $("tag-input").value, checker.tagPattern);
+  tagError = added.error;
+  if (!tagError) {
+    state.form.tags = added.tags;
+    $("tag-input").value = "";
+  }
   renderTags();
   refresh();
+}
+
+// A refused entry belongs to the form it was typed in, so a new or loaded form starts without it.
+function clearTagEntry() {
+  tagError = null;
+  $("tag-input").value = "";
 }
 
 function describeRecord(record) {
@@ -763,6 +779,7 @@ function extraMessages() {
     const facts = measured.get(record);
     for (const problem of facts ? facts.problems : []) found.push({ level: ERROR, path: where, text: problem });
   }
+  if (tagError) found.push({ level: ERROR, path: "tags", text: tagError });
   if (archiveNames && current.document.type !== "modpack") {
     for (const problem of inspectArchive(archiveNames, current.document).problems) {
       found.push({ level: ERROR, path: "archive", text: problem });
@@ -1069,6 +1086,7 @@ function useBase(text, base, form, loaded) {
   archiveNames = null;
   archiveTicket = null;
   $("archive").value = "";
+  clearTagEntry();
   say("msg-load", null, loaded);
   renderAll();
 }
