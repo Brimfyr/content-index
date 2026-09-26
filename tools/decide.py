@@ -83,30 +83,30 @@ def _comment(first, verdict, paragraphs=(), run_url="", rerun=False):
     return "\n\n".join(sections)
 
 
-def decide(verdict, candidate, ownership_result, run_url=""):
+def decide(verdict, candidate, ownership_result, run_url="", advice=()):
     """The status reports validation alone. Ownership is a separate axis, so a
     listing that validates but cannot prove it is green and waits for a steward.
+
+    `advice` goes into the comment whatever the outcome.
     """
     outcome = verdict.get("verdict")
+
+    def comment(first, paragraphs=(), rerun=False):
+        return _comment(first, verdict, [*paragraphs, *advice], run_url, rerun)
 
     if outcome == REJECT:
         return Decision(
             "failure",
             "the validation rejected this change",
-            comment=_comment(
-                "The validation rejected this change.", verdict, run_url=run_url, rerun=True
-            ),
+            comment=comment("The validation rejected this change.", rerun=True),
         )
 
     if outcome != PASS:
         return Decision(
             "error",
             "the validation could not reach a verdict",
-            comment=_comment(
-                "The validation could not reach a verdict, so nothing is decided yet.",
-                verdict,
-                run_url=run_url,
-                rerun=True,
+            comment=comment(
+                "The validation could not reach a verdict, so nothing is decided yet.", rerun=True
             ),
         )
 
@@ -114,11 +114,9 @@ def decide(verdict, candidate, ownership_result, run_url=""):
         return Decision(
             "failure",
             "the pack ownership check rejected this change",
-            comment=_comment(
+            comment=comment(
                 "The pack ownership check rejected this change.",
-                verdict,
                 [_sentence(ownership_result.reason)],
-                run_url,
                 rerun=True,
             ),
         )
@@ -129,12 +127,7 @@ def decide(verdict, candidate, ownership_result, run_url=""):
             "success",
             "validated, and a steward decides",
             needs_steward=True,
-            comment=_comment(
-                "Validated.",
-                verdict,
-                [f"A steward has to merge this one, because {reason}."],
-                run_url,
-            ),
+            comment=comment("Validated.", [f"A steward has to merge this one, because {reason}."]),
         )
 
     if ownership_result.state == ownership.VERIFIED:
@@ -150,12 +143,7 @@ def decide(verdict, candidate, ownership_result, run_url=""):
             "success",
             "validated, arming auto-merge",
             auto_merge=True,
-            comment=_comment(
-                "Validated.",
-                verdict,
-                [next_step],
-                run_url,
-            ),
+            comment=comment("Validated.", [next_step]),
         )
 
     if ownership_result.state == ownership.COULD_NOT_EVALUATE:
@@ -163,14 +151,12 @@ def decide(verdict, candidate, ownership_result, run_url=""):
             "success",
             "validated, ownership could not be checked",
             needs_steward=True,
-            comment=_comment(
+            comment=comment(
                 "Validated.",
-                verdict,
                 [
                     "The ownership check reached no verdict, so this waits for a steward.",
                     _sentence(ownership_result.reason),
                 ],
-                run_url,
             ),
         )
 
@@ -186,14 +172,9 @@ def decide(verdict, candidate, ownership_result, run_url=""):
         "success",
         "validated, ownership not verified",
         needs_steward=True,
-        comment=_comment(
+        comment=comment(
             "Validated, and ownership is not verified, so a steward decides.",
-            verdict,
-            [
-                _sentence(ownership_result.reason),
-                instructions,
-            ],
-            run_url,
+            [_sentence(ownership_result.reason), instructions],
         ),
     )
 
@@ -580,6 +561,61 @@ def ownership_for_all(api, pull, paths, head_sha):
     return ownership.Result(worst.state, reason, worst.proof, worst.instructions)
 
 
+def new_file_url(repository, branch, path, text):
+    """GitHub's page that commits a new file to `branch`, with the content filled in."""
+    return (
+        f"https://github.com/{repository}/new/{urllib.parse.quote(branch, safe='/')}"
+        f"?filename={urllib.parse.quote(path, safe='/')}&value={urllib.parse.quote(text, safe='')}"
+    )
+
+
+def owner_advice(pull, paths):
+    """The owner records a first pack claim lacks, each as a comment paragraph
+    with its content and a link that adds it to the head branch. A commit there
+    runs the checks again. A head repository that is gone gets no link.
+    """
+    user = pull.get("user") or {}
+    text = pack_ownership.record_text(user.get("login"), user.get("id"))
+    _, problem = pack_ownership.parse_record(text, "the pull request author")
+    if problem:
+        return []
+
+    head = pull.get("head") or {}
+    repository = (head.get("repo") or {}).get("full_name") or ""
+    branch = head.get("ref") or ""
+    owner, _, name = repository.partition("/")
+    reachable = bool(branch) and all(ownership.GITHUB_NAME.match(part) for part in (owner, name))
+
+    paragraphs = []
+    for path in paths:
+        # The path comes from the pull request, so only a plain one goes into Markdown.
+        if not pack_ownership.OWNER_RECORD.fullmatch(path):
+            continue
+        lines = [
+            f"A first pack claim also adds `{path}`, naming the account that opened this "
+            "pull request:",
+            "",
+            "```json",
+            text.rstrip("\n"),
+            "```",
+            "",
+        ]
+        if reachable:
+            lines.append(
+                f"[Add {path} to this pull request]({new_file_url(repository, branch, path, text)}). "
+                "GitHub opens the new file on the branch of this pull request with this content, "
+                "and a commit there runs the checks again. If the file opens empty, paste the "
+                "content above."
+            )
+        else:
+            lines.append(
+                "The head repository of this pull request cannot be reached, so there is no "
+                "link. Add the file with this content next to the pack version."
+            )
+        paragraphs.append("\n".join(lines))
+    return paragraphs
+
+
 def _named(path, reason):
     """The reason with the document it belongs to, unless it already names it first."""
     return reason if reason.startswith(path) else f"{path}: {reason}"
@@ -739,7 +775,10 @@ def act(api, arguments):
     if checked and verdict.get("verdict") == PASS:
         result = ownership_for_all(api, pull, checked, arguments.head_sha)
 
-    decision = decide({**verdict, "scope_reason": reason}, candidate, result, arguments.run_url)
+    advice = owner_advice(pull, pack_ownership.missing_records(api, pull, changes))
+    decision = decide(
+        {**verdict, "scope_reason": reason}, candidate, result, arguments.run_url, advice
+    )
 
     if decision.auto_merge:
         # Auto-merge cannot be armed once GitHub calls the pull request mergeable.

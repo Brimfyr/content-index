@@ -15,6 +15,7 @@ The first pull request that creates `packs/<id>/` also adds `packs/<id>/owner.js
 ```
 
 The account id is the numeric id from the GitHub account API.
+When the first pull request has no owner record, the comment of the bot gives this file for its author, with a link that adds it to the branch of the pull request.
 A steward checks and accepts the first claim because a pack has no release host that can prove ownership.
 The owner record is steward-owned and does not become authority until it is on the base branch.
 Later pack versions merge themselves only when that same GitHub account opens the pull request.
