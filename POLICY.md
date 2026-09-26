@@ -78,6 +78,15 @@ A pull request that validates but cannot prove that its author controls the rele
 
 A steward merges such a pull request by hand after checking what the automation could not.
 
+## Who is told
+
+When somebody other than the owner opens a pull request that changes a listing or a pack, for example a steward edit or a handover, the bot's comment on it mentions the owner with `@login`.
+A pull request that sets or lifts a state in `index-status.toml` mentions the owner of every listing or pack it names.
+The owner of a listing is the account that its ownership proof names, as in [CONTRIBUTING.md](CONTRIBUTING.md#proving-you-control-the-release-host), and the owner of a pack is the account in `packs/<id>/owner.json`.
+When no owner can be named, the comment says so and mentions nobody.
+The bot mentions and does not assign, because GitHub assigns only people with access to this repository.
+A mention subscribes the owner to that one pull request, and they can unsubscribe from it on its page.
+
 ## Response expectations and escalation
 
 The stewards are volunteers with no rota, so this document promises no response time.

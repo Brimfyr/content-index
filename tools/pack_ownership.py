@@ -14,7 +14,6 @@ PROOF = "pack owner record"
 OWNER_KEYS = {"github_login", "github_id"}
 # An owner record path that is safe to put into a URL and into Markdown.
 OWNER_RECORD = re.compile(r"packs/[A-Za-z0-9._-]+/owner\.json")
-LOGIN = re.compile(r"^(?!.*--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$")
 
 
 def _unique_object(pairs):
@@ -49,7 +48,7 @@ def parse_record(text, where):
 
     login = record["github_login"]
     account_id = record["github_id"]
-    if not isinstance(login, str) or not LOGIN.fullmatch(login):
+    if not isinstance(login, str) or not ownership.LOGIN.fullmatch(login):
         return None, f"{where}: github_login is not a valid GitHub login"
     if isinstance(account_id, bool) or not isinstance(account_id, int) or account_id < 1:
         return None, f"{where}: github_id must be a positive integer"
@@ -109,6 +108,19 @@ def _read(api, path, ref):
     if text is None:
         return None, ""
     return parse_record(text, path)
+
+
+def owner_record(api, pack_id, ref):
+    """The accepted owner record of a pack on `ref`, as (record, reason).
+
+    A pack without a record has no owner yet, which is not a failure, so both
+    are None. A record that cannot be read comes with the reason.
+    """
+    path = f"packs/{pack_id}/{OWNER_FILE}"
+    if not OWNER_RECORD.fullmatch(path):
+        return None, "the pack id is not one a path can carry"
+    record, problem = _read(api, path, ref)
+    return record, problem or None
 
 
 def verify(api, pull, document_path, head_sha):

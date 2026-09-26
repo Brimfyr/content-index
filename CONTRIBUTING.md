@@ -192,6 +192,8 @@ Handing a listing to somebody:
 - **You transfer the repository itself.** The redirect above carries your consent, and the release host moved with it, so the new owner updates the listing without a steward.
 - **You point the listing at a separate repository.** Nobody controls both hosts, so a steward applies it, unless you first put the incoming account's proof on your own repository, for example their `ksa-index-<username>` topic.
 
+When somebody else changes your listing or your pack, the bot's comment on their pull request mentions you, see [who is told](POLICY.md#who-is-told).
+
 ## After you are listed
 
 You touch your authored document again only when the facts change: a new dependency bound, a new link, or the day you stop maintaining it.

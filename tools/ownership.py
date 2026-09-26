@@ -22,6 +22,7 @@ MARKER_PATH = ".github/ksa-content-index.toml"
 TOPIC = "ksa-index-{login}"
 
 GITHUB_NAME = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$")
+LOGIN = re.compile(r"^(?!.*--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$")
 
 SPACEDOCK_API = "https://spacedock.info/api"
 SPACEDOCK_GAME_ID = 22409
@@ -123,19 +124,28 @@ def authority(document):
     return None, None, "the document names no release host and no GitHub repository"
 
 
-def _marker_names(text, listing_id, login):
-    """Naming only a login covers every listing on that repository, which is
+def _marker_login(text, listing_id):
+    """The login a marker file names for this listing, or None.
+
+    Naming only a login covers every listing on that repository, which is
     what it proves: write access to the host.
     """
     try:
         marker = tomllib.loads(text)
     except tomllib.TOMLDecodeError:
-        return False
+        return None
     claimed = marker.get("login") or marker.get("account")
     identifier = marker.get("id") or marker.get("listing")
-    if not isinstance(claimed, str) or claimed.lower() != login.lower():
-        return False
-    return not isinstance(identifier, str) or identifier.lower() == listing_id.lower()
+    if not isinstance(claimed, str):
+        return None
+    if isinstance(identifier, str) and identifier.lower() != listing_id.lower():
+        return None
+    return claimed
+
+
+def _marker_names(text, listing_id, login):
+    claimed = _marker_login(text, listing_id)
+    return claimed is not None and claimed.lower() == login.lower()
 
 
 def verify(document, login, author_id, api):
@@ -158,47 +168,9 @@ def _verify_spacedock(mod_id, listing_id, login, author_id, api):
     for the mod, and whoever controls that repository can list it. A mod
     without a usable link binds to nothing.
     """
-    if not mod_id.isdigit():
-        return Result(UNVERIFIED, f"'{mod_id}' is not a SpaceDock mod id, which is a number")
-
-    # The release flow of content-index-releases imports this module with
-    # lookups of its own that have no SpaceDock reader.
-    read = getattr(api, "spacedock_mod", None) or spacedock_mod
-    try:
-        mod = read(mod_id)
-    except Unavailable as error:
-        return Result(COULD_NOT_EVALUATE, str(error))
-
-    if mod is None:
-        return Result(UNVERIFIED, f"SpaceDock has no mod {mod_id}")
-
-    if mod.get("error"):
-        if "not published" in str(mod.get("reason") or "").lower():
-            return Result(UNVERIFIED, f"SpaceDock mod {mod_id} is not published")
-        return Result(UNVERIFIED, f"SpaceDock refuses to show mod {mod_id}")
-
-    if str(mod.get("id")) != mod_id:
-        return Result(
-            COULD_NOT_EVALUATE, f"the answer about SpaceDock mod {mod_id} is not the mod's document"
-        )
-
-    if mod.get("game_id") != SPACEDOCK_GAME_ID:
-        return Result(UNVERIFIED, f"SpaceDock mod {mod_id} is not a Kitten Space Agency mod")
-
-    link = mod.get("source_code")
-    if not link:
-        return Result(
-            UNVERIFIED,
-            f"SpaceDock mod {mod_id} has no source code link, so nothing binds it to a "
-            "GitHub repository",
-        )
-
-    repository = github_repository(link)
-    if repository is None:
-        return Result(
-            UNVERIFIED,
-            f"the source code link of SpaceDock mod {mod_id} does not name a GitHub repository",
-        )
+    repository, failure = _spacedock_repository(mod_id, api)
+    if failure is not None:
+        return failure
 
     result = _verify_repository(
         repository, listing_id, login, author_id, api, named_by="the link on SpaceDock"
@@ -210,19 +182,79 @@ def _verify_spacedock(mod_id, listing_id, login, author_id, api):
     )
 
 
-def _verify_repository(target, listing_id, login, author_id, api, named_by="the listing"):
-    """The three proofs on one GitHub repository."""
+def _spacedock_repository(mod_id, api):
+    """The GitHub repository a SpaceDock mod's source code link names, as
+    (repository, None), or (None, the Result that says why there is none).
+    """
+    if not mod_id.isdigit():
+        return None, Result(UNVERIFIED, f"'{mod_id}' is not a SpaceDock mod id, which is a number")
+
+    # The release flow of content-index-releases imports this module with
+    # lookups of its own that have no SpaceDock reader.
+    read = getattr(api, "spacedock_mod", None) or spacedock_mod
+    try:
+        mod = read(mod_id)
+    except Unavailable as error:
+        return None, Result(COULD_NOT_EVALUATE, str(error))
+
+    if mod is None:
+        return None, Result(UNVERIFIED, f"SpaceDock has no mod {mod_id}")
+
+    if mod.get("error"):
+        if "not published" in str(mod.get("reason") or "").lower():
+            return None, Result(UNVERIFIED, f"SpaceDock mod {mod_id} is not published")
+        return None, Result(UNVERIFIED, f"SpaceDock refuses to show mod {mod_id}")
+
+    if str(mod.get("id")) != mod_id:
+        return None, Result(
+            COULD_NOT_EVALUATE, f"the answer about SpaceDock mod {mod_id} is not the mod's document"
+        )
+
+    if mod.get("game_id") != SPACEDOCK_GAME_ID:
+        return None, Result(UNVERIFIED, f"SpaceDock mod {mod_id} is not a Kitten Space Agency mod")
+
+    link = mod.get("source_code")
+    if not link:
+        return None, Result(
+            UNVERIFIED,
+            f"SpaceDock mod {mod_id} has no source code link, so nothing binds it to a "
+            "GitHub repository",
+        )
+
+    repository = github_repository(link)
+    if repository is None:
+        return None, Result(
+            UNVERIFIED,
+            f"the source code link of SpaceDock mod {mod_id} does not name a GitHub repository",
+        )
+    return repository, None
+
+
+def _read_repository(target, api, named_by):
+    """GitHub's answer about `target`, as (repository, None), or (None, the
+    Result that says why it cannot stand for the listing).
+    """
     try:
         repository = api.repository(target)
     except Unavailable as error:
-        return Result(COULD_NOT_EVALUATE, str(error))
+        return None, Result(COULD_NOT_EVALUATE, str(error))
 
     if repository is None:
-        return Result(UNVERIFIED, f"{target} does not exist or is private")
+        return None, Result(UNVERIFIED, f"{target} does not exist or is private")
 
     full_name = repository.get("full_name") or ""
     if full_name.lower() != target.lower():
-        return Result(UNVERIFIED, f"{target} now answers as {full_name}, so {named_by} is stale")
+        return None, Result(
+            UNVERIFIED, f"{target} now answers as {full_name}, so {named_by} is stale"
+        )
+    return repository, None
+
+
+def _verify_repository(target, listing_id, login, author_id, api, named_by="the listing"):
+    """The three proofs on one GitHub repository."""
+    repository, failure = _read_repository(target, api, named_by)
+    if failure is not None:
+        return failure
 
     # The owner of a fork is the account that forked it, and GitHub copies no
     # topic to a fork, but a fork inherits its parent's marker file (RFC 0079).
@@ -257,6 +289,71 @@ def _verify_repository(target, listing_id, login, author_id, api, named_by="the 
         f"{login} did not prove control of {target}: no matching owner, no "
         f"{TOPIC.format(login=login.lower())} topic, and no {MARKER_PATH}",
     )
+
+
+def owner_logins(document, api):
+    """The accounts the proofs above name as the owners of a document's host,
+    as (logins, reason). Nothing is stored, so this asks the host every time.
+
+    A personal repository names its owner. An organization repository names
+    every `ksa-index-<login>` topic and the login of its marker file, and a fork
+    of one names only its topics. A SpaceDock mod names the owners of the
+    repository its source code link names. No login comes with the reason, and
+    a host that does not answer is such a reason, never an exception.
+    """
+    listing_id = document.get("id") or ""
+    kind, target, reason = authority(document)
+    named_by = "the listing"
+    if kind == "spacedock":
+        target, failure = _spacedock_repository(target, api)
+        if failure is not None:
+            return (), failure.reason
+        kind, named_by = "github", "the link on SpaceDock"
+    if kind != "github":
+        return (), reason
+
+    repository, failure = _read_repository(target, api, named_by)
+    if failure is not None:
+        return (), failure.reason
+
+    owner = repository.get("owner") or {}
+    if owner.get("type") == "User":
+        login = owner.get("login")
+        if isinstance(login, str) and LOGIN.fullmatch(login):
+            return (login,), ""
+        return (), f"GitHub names no owner of {target}"
+
+    try:
+        topics = api.topics(target)
+    except Unavailable as error:
+        return (), str(error)
+    prefix = TOPIC.format(login="")
+    logins = [topic[len(prefix):] for topic in topics if topic.startswith(prefix)]
+
+    if not repository.get("fork"):
+        try:
+            marker = api.file(target, MARKER_PATH)
+        except Unavailable as error:
+            marker = None
+            if not logins:
+                return (), str(error)
+        if marker is not None:
+            claimed = _marker_login(marker, listing_id)
+            if claimed is not None:
+                logins.append(claimed)
+
+    found = {}
+    for login in logins:
+        if LOGIN.fullmatch(login):
+            found.setdefault(login.lower(), login)
+    if found:
+        return tuple(found[key] for key in sorted(found)), ""
+    # The reason reaches a GitHub comment, which hides a bare <login> as an HTML
+    # tag, so the placeholder and the path stay in code spans.
+    topic = TOPIC.format(login="<login>")
+    if repository.get("fork"):
+        return (), f"no `{topic}` topic on the fork {target} names an owner"
+    return (), f"no `{topic}` topic and no `{MARKER_PATH}` on {target} names an owner"
 
 
 def _bound(document):
