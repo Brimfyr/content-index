@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: MIT
 """Whether the account opening a pull request controls the release host it points at.
 
-RFC 0033 for the marker file and the owner id, RFC 0038 for the topic.
+RFC 0033 for the marker file and the owner id, RFC 0038 for the topic, RFC 0079
+for a fork.
 """
 
 import re
@@ -180,9 +181,8 @@ def _verify_repository(target, listing_id, login, author_id, api, named_by="the 
     if full_name.lower() != target.lower():
         return Result(UNVERIFIED, f"{target} now answers as {full_name}, so {named_by} is stale")
 
-    if repository.get("fork"):
-        return Result(UNVERIFIED, f"{target} is a fork")  # forks inherit files
-
+    # The owner of a fork is the account that forked it, and GitHub copies no
+    # topic to a fork, but a fork inherits its parent's marker file (RFC 0079).
     owner_id = (repository.get("owner") or {}).get("id")
     if author_id is not None and owner_id == author_id:
         return Result(VERIFIED, "", "owner id")
@@ -193,6 +193,14 @@ def _verify_repository(target, listing_id, login, author_id, api, named_by="the 
         return Result(COULD_NOT_EVALUATE, str(error))
     if TOPIC.format(login=login.lower()) in topics:
         return Result(VERIFIED, "", "topic")
+
+    if repository.get("fork"):
+        return Result(
+            UNVERIFIED,
+            f"{login} did not prove control of the fork {target}: no matching owner and no "
+            f"{TOPIC.format(login=login.lower())} topic, and a fork's {MARKER_PATH} does "
+            "not count, because a fork inherits its files",
+        )
 
     try:
         marker = api.file(target, MARKER_PATH)

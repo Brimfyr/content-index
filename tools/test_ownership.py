@@ -188,14 +188,6 @@ class Proofs(unittest.TestCase):
         )
         self.assertEqual(self.verify(api).state, ownership.UNVERIFIED)
 
-    def test_a_fork_is_rejected_even_when_the_owner_matches(self):
-        api = FakeApi(
-            {"Maxi/KSA-AutoStage": repository("Maxi/KSA-AutoStage", owner_id=7, fork=True)}
-        )
-        result = self.verify(api, author_id=7)
-        self.assertEqual(result.state, ownership.UNVERIFIED)
-        self.assertIn("fork", result.reason)
-
     def test_a_repository_that_moved_does_not_verify(self):
         api = FakeApi({"Maxi/KSA-AutoStage": repository("Maxi/Renamed", owner_id=7)})
         result = self.verify(api, author_id=7)
@@ -220,6 +212,58 @@ class Proofs(unittest.TestCase):
             self.assertEqual(
                 self.verify(api).state, ownership.COULD_NOT_EVALUATE, stage
             )
+
+
+class ForkProofs(unittest.TestCase):
+    """A fork proves control through its owner or its topic, never through its files."""
+
+    MARKER = 'id = "AutoStage"\nlogin = "Maxi"\n'
+
+    def verify(self, api, login="Maxi", author_id=1):
+        return ownership.verify(LISTING, login, author_id, api)
+
+    def fork(self, owner_id=99, **rest):
+        return FakeApi(
+            {"Maxi/KSA-AutoStage": repository("Maxi/KSA-AutoStage", owner_id=owner_id, fork=True)},
+            **rest,
+        )
+
+    def test_a_fork_whose_owner_opened_the_pull_request_verifies(self):
+        # The owner of a fork is the account that forked it.
+        result = self.verify(self.fork(owner_id=7), author_id=7)
+        self.assertEqual(result.state, ownership.VERIFIED)
+        self.assertEqual(result.proof, "owner id")
+
+    def test_a_fork_with_the_topic_of_the_pull_request_author_verifies(self):
+        # GitHub copies no topic to a fork, so an admin of the fork set this one.
+        api = self.fork(topics={"Maxi/KSA-AutoStage": ["ksa-index-maxi"]})
+        result = self.verify(api)
+        self.assertEqual(result.state, ownership.VERIFIED)
+        self.assertEqual(result.proof, "topic")
+
+    def test_a_fork_with_only_a_marker_file_is_refused(self):
+        # A fork inherits the files of its parent, so the marker proves nothing.
+        api = self.fork(files={("Maxi/KSA-AutoStage", ownership.MARKER_PATH): self.MARKER})
+        result = self.verify(api)
+        self.assertEqual(result.state, ownership.UNVERIFIED)
+        self.assertIn("did not prove control of the fork Maxi/KSA-AutoStage", result.reason)
+        self.assertIn("a fork inherits its files", result.reason)
+
+    def test_the_same_marker_verifies_where_it_is_not_a_fork(self):
+        api = FakeApi(
+            {"Maxi/KSA-AutoStage": repository("Maxi/KSA-AutoStage", owner_id=99)},
+            files={("Maxi/KSA-AutoStage", ownership.MARKER_PATH): self.MARKER},
+        )
+        self.assertEqual(self.verify(api).state, ownership.VERIFIED)
+
+    def test_a_fork_another_account_owns_is_refused(self):
+        result = self.verify(self.fork(owner_id=99), login="Attacker", author_id=7)
+        self.assertEqual(result.state, ownership.UNVERIFIED)
+        self.assertIn("Attacker did not prove control of the fork", result.reason)
+
+    def test_a_fork_whose_topics_cannot_be_read_is_not_a_rejection(self):
+        result = self.verify(self.fork(unavailable=["topics"]))
+        self.assertEqual(result.state, ownership.COULD_NOT_EVALUATE)
 
 
 class SpaceDockProofs(unittest.TestCase):
@@ -300,10 +344,18 @@ class SpaceDockProofs(unittest.TestCase):
             result = self.verify(self.api(document, owner_id=7), author_id=7)
             self.assertEqual(result.state, ownership.COULD_NOT_EVALUATE, document)
 
-    def test_a_link_to_a_fork_is_rejected(self):
+    def test_a_link_to_a_fork_verifies_through_its_owner(self):
         result = self.verify(self.api(owner_id=7, fork=True), author_id=7)
+        self.assertEqual(result.state, ownership.VERIFIED)
+        self.assertEqual(result.proof, "source code link, owner id")
+
+    def test_a_link_to_a_fork_with_only_a_marker_file_is_refused(self):
+        marker = 'id = "AutoStage"\nlogin = "Maxi"\n'
+        api = self.api(fork=True, files={("Maxi/KSA-AutoStage", ownership.MARKER_PATH): marker})
+        result = self.verify(api)
         self.assertEqual(result.state, ownership.UNVERIFIED)
-        self.assertIn("fork", result.reason)
+        self.assertIn("SpaceDock mod 4253 links to Maxi/KSA-AutoStage", result.reason)
+        self.assertIn("a fork inherits its files", result.reason)
 
     def test_a_linked_repository_that_moved_makes_the_link_stale(self):
         api = FakeApi(
