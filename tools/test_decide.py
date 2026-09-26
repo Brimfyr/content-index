@@ -884,8 +884,9 @@ class SpaceDockApi(unittest.TestCase):
         self.assertIn("502", str(raised.exception))
 
     def test_a_network_failure_is_unavailable(self):
-        with self.assertRaises(ownership.Unavailable):
+        with self.assertRaises(ownership.Unavailable) as raised:
             self.fetch(error=OSError("connection reset"))
+        self.assertIn("SpaceDock did not answer about mod 4253", str(raised.exception))
 
     def test_a_body_that_is_not_a_document_is_unavailable(self):
         for body in (b"not json", b"[]", b"null"):
