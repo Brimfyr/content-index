@@ -248,6 +248,13 @@ class Table(unittest.TestCase):
         self.assertIn(ownership.MARKER_PATH, decision.comment)
         self.assertIn("source code link", decision.comment)
 
+    def test_the_comment_offers_the_marker_file_only_outside_a_fork(self):
+        # A fork's marker file does not verify it, so the advice must not send
+        # the author of a fork to commit one.
+        decision = decide.decide(verdict(), True, UNVERIFIED)
+        self.assertIn(f"when it is not a fork, commit `{ownership.MARKER_PATH}`", decision.comment)
+        self.assertIn("A fork also passes when your account owns it", decision.comment)
+
     def test_pack_guidance_does_not_suggest_a_release_host_proof(self):
         result = ownership.Result(
             ownership.UNVERIFIED,

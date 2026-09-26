@@ -457,11 +457,11 @@
           <li>A bot checks the file, downloads your latest release and fetches your images, then comments with its verdict.</li>
           <li>It verifies that your GitHub account controls the release host, by one of these:
             <ul>
-              <li>the repository under Releases is in your own account and is not a fork,</li>
+              <li>the repository under Releases is in your own account,</li>
               <li>the repository carries the topic <code>ksa-index-&lt;your-github-username&gt;</code> in lowercase, which is the easy way for an organization repository,</li>
               <li>the repository has a file <code>.github/ksa-content-index.toml</code> that names the listing id and your username.</li>
             </ul>
-            A SpaceDock mod proves it through the source code link on its SpaceDock page.
+            A SpaceDock mod proves it through the source code link on its SpaceDock page. A fork proves it through its owner or the topic only, because it inherits the files of the repository it was forked from. A listing from a fork needs an id of its own.
           </li>
           <li>When everything is green, the pull request merges by itself. Otherwise a steward looks at it.</li>
         </ol>
